@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-localshops
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  localshops-overview.json: |-
+    {
+      "annotations": {"list": []},
+      "editable": true,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "title": "Public endpoints up",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "probe_success", "legendFormat": "{{ instance }}", "refId": "A"}],
+          "fieldConfig": {"defaults": {"min": 0, "max": 1, "mappings": [{"type": "value", "options": {"0": {"text": "DOWN", "color": "red"}, "1": {"text": "UP", "color": "green"}}}], "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 1}]}}, "overrides": []},
+          "gridPos": {"h": 5, "w": 24, "x": 0, "y": 0}
+        },
+        {
+          "title": "API request rate",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "sum by (environment) (rate(localshops_http_requests_total[5m]))", "legendFormat": "{{ environment }}", "refId": "A"}],
+          "gridPos": {"h": 8, "w": 8, "x": 0, "y": 5}
+        },
+        {
+          "title": "API 5xx rate",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "sum by (environment) (rate(localshops_http_requests_total{status_code=~\"5..\"}[5m]))", "legendFormat": "{{ environment }}", "refId": "A"}],
+          "gridPos": {"h": 8, "w": 8, "x": 8, "y": 5}
+        },
+        {
+          "title": "API p95 latency",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "histogram_quantile(0.95, sum by (le, environment) (rate(localshops_http_request_duration_seconds_bucket[5m])))", "legendFormat": "{{ environment }}", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "s"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 5}
+        },
+        {
+          "title": "Localshops logs",
+          "type": "logs",
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [{"expr": "{namespace=~\"localshops(-dev)?\"}", "refId": "A"}],
+          "options": {"showTime": true, "showLabels": true, "wrapLogMessage": true, "prettifyLogMessage": false, "enableLogDetails": true, "sortOrder": "Descending", "dedupStrategy": "none"},
+          "gridPos": {"h": 12, "w": 24, "x": 0, "y": 13}
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 41,
+      "tags": ["localshops", "platform"],
+      "templating": {"list": []},
+      "time": {"from": "now-6h", "to": "now"},
+      "timezone": "browser",
+      "title": "Localshops platform overview",
+      "uid": "localshops-overview",
+      "version": 1
+    }

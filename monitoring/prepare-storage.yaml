@@ -1,0 +1,63 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: monitoring-storage-prep-node01
+  namespace: kube-system
+spec:
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  restartPolicy: Never
+  nodeSelector:
+    kubernetes.io/hostname: node01
+  containers:
+    - name: prepare
+      image: busybox:1.37
+      command: [sh, -ec]
+      args:
+        - |
+          install -d -o 10001 -g 10001 -m 0750 /host/var/lib/monitoring/loki
+          stat -c 'prepared %n owner=%u:%g mode=%a' /host/var/lib/monitoring/loki
+      securityContext:
+        allowPrivilegeEscalation: true
+        runAsUser: 0
+      volumeMounts:
+        - name: host-root
+          mountPath: /host
+  volumes:
+    - name: host-root
+      hostPath:
+        path: /
+        type: Directory
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: monitoring-storage-prep-node02
+  namespace: kube-system
+spec:
+  automountServiceAccountToken: false
+  enableServiceLinks: false
+  restartPolicy: Never
+  nodeSelector:
+    kubernetes.io/hostname: node02
+  containers:
+    - name: prepare
+      image: busybox:1.37
+      command: [sh, -ec]
+      args:
+        - |
+          install -d -o 1000 -g 2000 -m 0750 /host/var/lib/monitoring/prometheus
+          install -d -o 1000 -g 2000 -m 0750 /host/var/lib/monitoring/alertmanager
+          install -d -o 10001 -g 10001 -m 0750 /host/var/lib/monitoring/tempo
+          stat -c 'prepared %n owner=%u:%g mode=%a' /host/var/lib/monitoring/prometheus /host/var/lib/monitoring/alertmanager /host/var/lib/monitoring/tempo
+      securityContext:
+        allowPrivilegeEscalation: true
+        runAsUser: 0
+      volumeMounts:
+        - name: host-root
+          mountPath: /host
+  volumes:
+    - name: host-root
+      hostPath:
+        path: /
+        type: Directory

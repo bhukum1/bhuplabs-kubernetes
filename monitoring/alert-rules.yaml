@@ -1,0 +1,127 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: bhuplabs-platform-alerts
+  namespace: monitoring
+  labels:
+    release: kps
+spec:
+  groups:
+    - name: public-endpoints
+      rules:
+        - alert: PublicEndpointDown
+          expr: probe_success{job=~".*blackbox.*"} == 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Public endpoint is unavailable"
+            description: "{{ $labels.instance }} has failed external probes for more than two minutes."
+        - alert: PublicEndpointSlow
+          expr: probe_duration_seconds{job=~".*blackbox.*"} > 3
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Public endpoint is slow"
+            description: "{{ $labels.instance }} has taken over three seconds for ten minutes."
+        - alert: TLSCertificateExpiresSoon
+          expr: (probe_ssl_earliest_cert_expiry - time()) < 14 * 24 * 3600
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "TLS certificate expires within 14 days"
+            description: "The certificate used by {{ $labels.instance }} needs attention."
+    - name: localshops-application
+      rules:
+        - alert: LocalshopsAPIMetricsUnavailable
+          expr: up{job="api",service="api"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "A Localshops API metrics endpoint is unavailable"
+            description: "Prometheus has failed to scrape {{ $labels.namespace }}/{{ $labels.pod }} for five minutes."
+        - alert: LocalshopsAPIMetricsMissing
+          expr: absent(up{job="api",service="api"})
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Localshops API metrics discovery is missing"
+            description: "Prometheus has discovered no Localshops API metrics targets for five minutes."
+        - alert: LocalshopsAPIHighErrorRate
+          expr: |
+            sum by (environment) (rate(localshops_http_requests_total{status_code=~"5.."}[5m]))
+              /
+            clamp_min(sum by (environment) (rate(localshops_http_requests_total[5m])), 0.001)
+              > 0.05
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Localshops API 5xx rate is above 5%"
+            description: "The {{ $labels.environment }} API has exceeded a 5% server-error rate for ten minutes."
+        - alert: LocalshopsAPIHighLatency
+          expr: |
+            histogram_quantile(0.95,
+              sum by (le, environment) (rate(localshops_http_request_duration_seconds_bucket[5m]))
+            ) > 1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Localshops API p95 latency is above one second"
+            description: "The {{ $labels.environment }} API has been slow for ten minutes."
+        - alert: LocalshopsDeploymentUnavailable
+          expr: |
+            kube_deployment_status_replicas_available{namespace=~"localshops(-dev)?",deployment=~"api|web"}
+              <
+            kube_deployment_spec_replicas{namespace=~"localshops(-dev)?",deployment=~"api|web"}
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Localshops deployment has unavailable replicas"
+            description: "{{ $labels.namespace }}/{{ $labels.deployment }} has been below its desired replica count for five minutes."
+    - name: capacity-safety
+      rules:
+        - alert: NodeRootFilesystemLow
+          expr: |
+            node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+              /
+            node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} < 0.15
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node root filesystem is below 15% free"
+            description: "{{ $labels.instance }} is running low on disk; local monitoring retention may need reduction."
+        - alert: NodeMemoryPressureHigh
+          expr: 1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.90
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node memory usage is above 90%"
+            description: "{{ $labels.instance }} has sustained high memory usage for 15 minutes."
+        - alert: NodeCPUHigh
+          expr: 1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.90
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Node CPU usage is above 90%"
+            description: "{{ $labels.instance }} has sustained high CPU usage for 15 minutes."
+        - alert: MonitoringPVCFillingUp
+          expr: |
+            kubelet_volume_stats_available_bytes{namespace="monitoring"}
+              /
+            kubelet_volume_stats_capacity_bytes{namespace="monitoring"} < 0.15
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Monitoring PVC is below 15% free"
+            description: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is filling up."

@@ -12,6 +12,11 @@ These resources cover controls outside the `localshops` namespace.
 - `keycloak-network-policies.yaml` restricts Keycloak and its PostgreSQL service ingress.
 - Network policy enforcement uses the version-pinned official Calico Canal deployment,
   with Flannel retaining VXLAN transport over `wg0` and Calico enforcing policy.
+- `configure-firewalld-for-canal.sh` permanently allows only forwarded traffic whose
+  source and destination are both inside the cluster pod CIDR. Run it as root on every
+  node before or immediately after installing Canal. Without this scoped rule,
+  firewalld classifies `cali*` workload interfaces as public and rejects direct endpoint
+  traffic even when Calico NetworkPolicy allows it.
 - `tune-grafana-vault-resources.sh` removes an unnecessary 250m Vault init-container CPU
   reservation that otherwise prevents Grafana from scheduling on `node01`. Reapply it
   after a monitoring Helm upgrade unless the same annotations are added to Helm values.
@@ -19,6 +24,26 @@ These resources cover controls outside the `localshops` namespace.
   Gateway API and Ingress backends. This preserves reliable cross-node routing through
   kube-proxy while Calico continues to enforce workload network policies. Reapply it after
   a Traefik Helm upgrade unless both native-LB settings are stored in Helm values.
+
+## Canal host firewall prerequisite
+
+Run this on every node. The command is idempotent and changes both the live and
+persistent firewalld configuration without reloading the firewall:
+
+```bash
+sudo cluster/configure-firewalld-for-canal.sh
+```
+
+Validate the scoped rule and direct workload routing after all nodes are configured:
+
+```bash
+firewall-cmd --zone=public --list-rich-rules
+kubectl get pods -A -o wide
+```
+
+Do not add the pod CIDR, public NIC, a wildcard `cali*` interface, or `0.0.0.0/0` to
+the trusted zone. The script does not open pod-to-host access; Calico remains
+responsible for workload policy enforcement before firewalld handles forwarding.
 
 ## Recovery boundary
 

@@ -1,0 +1,57 @@
+replicas: 1
+
+tempo:
+  memBallastSizeMbs: 0
+  reportingEnabled: false
+  retention: 24h
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: 0.0.0.0:4317
+        http:
+          endpoint: 0.0.0.0:4318
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ALL]
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+
+securityContext:
+  fsGroup: 10001
+  fsGroupChangePolicy: OnRootMismatch
+  runAsNonRoot: true
+  runAsUser: 10001
+  runAsGroup: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+persistence:
+  enabled: true
+  enableStatefulSetAutoDeletePVC: false
+  storageClassName: local-retain
+  size: 2Gi
+  selector:
+    matchLabels:
+      bhuplabs.dev/storage: tempo
+
+nodeSelector:
+  kubernetes.io/hostname: node02
+
+serviceMonitor:
+  enabled: true
+  additionalLabels:
+    release: kps
+
+networkPolicy:
+  enabled: false

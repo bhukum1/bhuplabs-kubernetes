@@ -1,0 +1,74 @@
+releaseLabel: true
+
+config:
+  modules:
+    http_2xx:
+      prober: http
+      timeout: 10s
+      http:
+        valid_http_versions: [HTTP/1.1, HTTP/2.0]
+        follow_redirects: true
+        preferred_ip_protocol: ip4
+        tls_config:
+          insecure_skip_verify: false
+
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    cpu: 100m
+    memory: 96Mi
+
+serviceMonitor:
+  selfMonitor:
+    enabled: true
+    labels:
+      release: kps
+  enabled: true
+  defaults:
+    labels:
+      release: kps
+    interval: 30s
+    scrapeTimeout: 15s
+    module: http_2xx
+  targets:
+    - name: localshops-dev-api
+      url: https://dev-api.bhuplabs.dev/health/ready
+      labels:
+        release: kps
+        environment: dev
+        service: api
+    - name: localshops-dev-app
+      url: https://dev-app.bhuplabs.dev/api/health
+      labels:
+        release: kps
+        environment: dev
+        service: app
+    - name: localshops-prod-api
+      url: https://api.bhuplabs.dev/health/ready
+      labels:
+        release: kps
+        environment: production
+        service: api
+    - name: localshops-prod-app
+      url: https://app.bhuplabs.dev/api/health
+      labels:
+        release: kps
+        environment: production
+        service: app
+    - name: keycloak
+      url: https://auth.bhuplabs.dev/realms/master/.well-known/openid-configuration
+      labels:
+        release: kps
+        environment: shared
+        service: keycloak
+    - name: grafana
+      url: https://grafana.bhuplabs.dev/login
+      labels:
+        release: kps
+        environment: shared
+        service: grafana
+
+networkPolicy:
+  enabled: false

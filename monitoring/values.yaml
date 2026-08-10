@@ -13,7 +13,77 @@ grafana:
   persistence:
     enabled: true
     existingClaim: grafana-data
+  additionalDataSources:
+    - name: Loki
+      uid: loki
+      type: loki
+      access: proxy
+      url: http://loki.monitoring.svc.cluster.local:3100
+      jsonData:
+        maxLines: 1000
+    - name: Tempo
+      uid: tempo
+      type: tempo
+      access: proxy
+      url: http://tempo.monitoring.svc.cluster.local:3200
+      jsonData:
+        nodeGraph:
+          enabled: true
+        tracesToLogsV2:
+          datasourceUid: loki
+          spanStartTimeShift: -1m
+          spanEndTimeShift: 1m
+          tags: [service.name, deployment.environment]
+          filterByTraceID: true
+          filterBySpanID: true
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      searchNamespace: ALL
 
 prometheus:
   prometheusSpec:
     retention: 7d
+    retentionSize: 3500MB
+    resources:
+      requests:
+        cpu: 100m
+        memory: 512Mi
+      limits:
+        cpu: 750m
+        memory: 1536Mi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          storageClassName: local-retain
+          selector:
+            matchLabels:
+              bhuplabs.dev/storage: prometheus
+          resources:
+            requests:
+              storage: 4Gi
+
+alertmanager:
+  alertmanagerSpec:
+    retention: 120h
+    resources:
+      requests:
+        cpu: 20m
+        memory: 96Mi
+      limits:
+        cpu: 200m
+        memory: 256Mi
+    storage:
+      volumeClaimTemplate:
+        spec:
+          accessModes: [ReadWriteOnce]
+          storageClassName: local-retain
+          selector:
+            matchLabels:
+              bhuplabs.dev/storage: alertmanager
+          resources:
+            requests:
+              storage: 512Mi

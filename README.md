@@ -7,6 +7,10 @@ Git-safe source for the deployed Bhuplabs platform:
 - cert-manager 1.21.0
 - Gateway API 1.5.1
 - kube-prometheus-stack 87.19.0
+- Grafana Loki 3.6.11, Helm chart 7.2.0
+- Grafana Tempo 2.9.0, Helm chart 1.24.4
+- Grafana Alloy 1.18.1, Helm chart 1.11.1
+- Prometheus Blackbox Exporter 0.28.0, Helm chart 11.17.1
 - HashiCorp Vault Community 2.0.3, Helm chart 0.34.0
 - Keycloak 26.7.0 with PostgreSQL 16
 - oauth2-proxy 7.15.2
@@ -22,7 +26,7 @@ Secret exports are included.
 ```text
 cluster/       Cluster hardening, CNI, backups, node storage, and operational tuning
 cert-manager/  ACME issuer and chart values
-monitoring/    Grafana/Prometheus storage and Helm values
+monitoring/    Metrics, logs, traces, probes, dashboards, alerts, and Retain storage
 n8n/           n8n, PostgreSQL, Vault injection, workflows, and chatbot frontend
 keycloak/      Keycloak, PostgreSQL, TLS, and SSO operational notes
 storage/       local Retain storage class
@@ -34,6 +38,9 @@ docs/          architecture and operational notes
 Cluster-wide controls and repeatable post-upgrade tuning live in `cluster/`. Read
 `cluster/README.md` before changing the control plane, CNI, backup jobs, or shared
 component scheduling.
+
+On firewalld-based nodes, run `cluster/configure-firewalld-for-canal.sh` as root on
+every node so its scoped pod-to-pod forwarding rule works with Calico NetworkPolicy.
 
 ## Prerequisites
 
@@ -132,24 +139,15 @@ them. Access control for those public endpoints must be implemented in the
 workflow itself.
 
 Install monitoring after creating `monitoring/grafana-admin` through a secure,
-out-of-band process:
+out-of-band process. The full deployment and validation sequence is maintained
+in `monitoring/README.md`; use it rather than applying only the original
+Grafana/Prometheus resources.
 
 ```bash
+kubectl apply -f monitoring/prepare-storage.yaml
 kubectl apply -f monitoring/storage.yaml
-helm repo add prometheus-community \
-  https://prometheus-community.github.io/helm-charts
-helm repo update
-helm upgrade --install kps \
-  prometheus-community/kube-prometheus-stack \
-  --namespace monitoring \
-  --create-namespace \
-  --version 87.19.0 \
-  --values monitoring/values.yaml
-helm upgrade kps prometheus-community/kube-prometheus-stack \
-  --namespace monitoring \
-  --version 87.19.0 \
-  --reuse-values \
-  --values monitoring/grafana-sso-values.yaml
+kubectl apply -f monitoring/storage-observability.yaml
+# Continue with the pinned Helm commands in monitoring/README.md.
 kubectl apply -f traefik/application-routes.yaml
 ```
 
