@@ -13,11 +13,18 @@ These resources cover controls outside the `localshops` namespace.
 - Network policy enforcement uses the version-pinned official Calico Canal deployment,
   with Flannel retaining VXLAN transport over `wg0` and Calico enforcing policy.
 - `configure-firewalld-for-canal.sh` permanently binds only the cluster pod CIDR to a
-  dedicated `canal-pods` zone and enables forwarding within that zone. The zone exposes
-  no host services and retains the default INPUT rejection. Run it as root on every node
-  before or immediately after installing Canal. Without this scoped zone, firewalld
-  classifies `cali*` workload interfaces as public and rejects direct endpoint traffic
-  even when Calico NetworkPolicy allows it.
+  dedicated `canal-pods` zone and enables forwarding within that zone. It also permits
+  HTTPS egress, DNS only to OCI's link-local resolver, and the exact host ports required
+  by Prometheus. Run it as root on every node before or immediately after installing
+  Canal. Without this scoped zone, firewalld classifies `cali*` workload interfaces as
+  public and rejects direct endpoint traffic even when Calico NetworkPolicy allows it.
+- `enable-control-plane-metrics.sh` backs up the static-pod manifests outside the live
+  manifest directory, then exposes the scheduler, controller-manager, and etcd metric
+  listeners on the private control-plane address. Run it only after the scoped firewall
+  policy is active.
+- `enable-kube-proxy-metrics.sh` binds kube-proxy metrics to each node's private host IP
+  through the downward API and performs a rolling DaemonSet restart. Its listener also
+  remains protected by the scoped firewall.
 - `tune-grafana-vault-resources.sh` removes an unnecessary 250m Vault init-container CPU
   reservation that otherwise prevents Grafana from scheduling on `node01`. Reapply it
   after a monitoring Helm upgrade unless the same annotations are added to Helm values.
@@ -39,13 +46,24 @@ Validate the scoped rule and direct workload routing after all nodes are configu
 
 ```bash
 firewall-cmd --zone=canal-pods --list-all
+firewall-cmd --policy=canal-egress --list-all
+firewall-cmd --policy=canal-hostmon --list-all
 kubectl get pods -A -o wide
 ```
 
+Enable the standard kube-prometheus-stack control-plane targets after the firewall
+policy is active on every node:
+
+```bash
+sudo cluster/enable-control-plane-metrics.sh
+cluster/enable-kube-proxy-metrics.sh
+```
+
 Do not add the pod CIDR, public NIC, a wildcard `cali*` interface, or `0.0.0.0/0` to
-the trusted zone. The dedicated zone has no allowed host services and enables only
-intra-zone forwarding; Calico remains responsible for workload policy enforcement
-before firewalld handles forwarding.
+the trusted zone. The dedicated zone allows only the listed Kubernetes monitoring ports
+from the pod CIDR. The egress policy allows TCP 443 and OCI resolver traffic; it does not
+grant pod access to arbitrary host services. Calico remains responsible for workload
+policy enforcement before firewalld handles forwarding.
 
 ## Recovery boundary
 

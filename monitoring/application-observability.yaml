@@ -7,7 +7,9 @@ metadata:
     release: kps
 spec:
   namespaceSelector:
-    matchNames: [localshops, localshops-dev]
+    # Production is covered by readiness probes until its metrics-enabled image
+    # is released. Add `localshops` after /metrics exists in that deployment.
+    matchNames: [localshops-dev]
   selector:
     matchLabels:
       app.kubernetes.io/name: api
@@ -21,10 +23,6 @@ spec:
           targetLabel: environment
           regex: localshops-dev
           replacement: dev
-        - sourceLabels: [__meta_kubernetes_namespace]
-          targetLabel: environment
-          regex: localshops
-          replacement: production
 ---
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -44,6 +42,12 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: prometheus
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus-blackbox-exporter
       ports:
         - protocol: TCP
           port: 8000
@@ -66,6 +70,56 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/name: prometheus
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus-blackbox-exporter
       ports:
         - protocol: TCP
           port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: blackbox-web-health
+  namespace: localshops-dev
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus-blackbox-exporter
+      ports:
+        - protocol: TCP
+          port: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: blackbox-web-health
+  namespace: localshops
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: web
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus-blackbox-exporter
+      ports:
+        - protocol: TCP
+          port: 3000

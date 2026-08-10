@@ -34,41 +34,48 @@ serviceMonitor:
     module: http_2xx
   targets:
     - name: localshops-dev-api
-      url: https://dev-api.bhuplabs.dev/health/ready
+      url: http://api.localshops-dev.svc.cluster.local:8000/health/ready
       labels:
         release: kps
         environment: dev
         service: api
+        scope: internal
     - name: localshops-dev-app
-      url: https://dev-app.bhuplabs.dev/api/health
+      url: http://web.localshops-dev.svc.cluster.local:3000/api/health
       labels:
         release: kps
         environment: dev
         service: app
+        scope: internal
     - name: localshops-prod-api
-      url: https://api.bhuplabs.dev/health/ready
+      url: http://api.localshops.svc.cluster.local:8000/health/ready
       labels:
         release: kps
         environment: production
         service: api
+        scope: internal
     - name: localshops-prod-app
-      url: https://app.bhuplabs.dev/api/health
+      url: http://web.localshops.svc.cluster.local:3000/
+      hostname: app.bhuplabs.dev
       labels:
         release: kps
         environment: production
         service: app
+        scope: internal
     - name: keycloak
-      url: https://auth.bhuplabs.dev/realms/master/.well-known/openid-configuration
+      url: http://keycloak.keycloak.svc.cluster.local:8080/realms/master/.well-known/openid-configuration
       labels:
         release: kps
         environment: shared
         service: keycloak
+        scope: internal
     - name: grafana
-      url: https://grafana.bhuplabs.dev/login
+      url: http://kps-grafana.monitoring.svc.cluster.local/login
       labels:
         release: kps
         environment: shared
         service: grafana
+        scope: internal
 
 networkPolicy:
   enabled: false

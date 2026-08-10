@@ -14,7 +14,7 @@ TLS and Keycloak SSO configuration.
 | Loki | Kubernetes and application logs | 4 GiB on `node01` | 72 hours |
 | Tempo | OTLP traces | 2 GiB on `node02` | 24 hours |
 | Alloy | Per-node log collector and OTLP gateway | Ephemeral | Not applicable |
-| Blackbox exporter | Public HTTPS, response-time, and TLS probes | None | Stored in Prometheus |
+| Blackbox exporter | Cluster-local service health and response-time probes | None | Stored in Prometheus |
 
 All PVs use `local-retain`. Deleting a Helm release or PVC does not delete its
 underlying data, but local storage is not highly available and is not a backup.
@@ -33,7 +33,8 @@ The chart versions are pinned to:
 
 Before installing the stack on firewalld-based nodes, apply the scoped Canal
 forwarding prerequisite on every node. It creates a dedicated pod-CIDR zone
-with only intra-zone forwarding enabled and no access to node-local services:
+with intra-zone forwarding, HTTPS and OCI DNS egress, and only the node-local
+ports required by Prometheus:
 
 ```bash
 sudo cluster/configure-firewalld-for-canal.sh
@@ -42,6 +43,15 @@ sudo cluster/configure-firewalld-for-canal.sh
 Prometheus scrapes endpoint Pod IPs directly. A cluster where only ClusterIP
 traffic works will otherwise show every target as down even though the
 monitoring pods themselves are healthy.
+
+The default kubeadm scheduler, controller-manager, etcd, and kube-proxy metric
+listeners bind to loopback. After the firewall policy is active on every node,
+enable their private listeners using the scripts documented in `cluster/README.md`.
+
+The API ServiceMonitor currently scrapes `localshops-dev`. Production API health
+is still checked through Blackbox, but its older image returns 404 on `/metrics`.
+Add `localshops` to the ServiceMonitor namespace selector when the metrics-enabled
+API image is promoted to production.
 
 Prepare the host directories once, then create the Retain PVs:
 
@@ -113,6 +123,14 @@ Grafana. The current receiver is deliberately `null`: external delivery is not
 enabled until a notification credential and destination are supplied. Add one
 receiver (SMTP, Slack, or a Telegram webhook) through a Kubernetes Secret or
 Vault; never commit its token to this repository.
+
+Blackbox probes currently use cluster-local service addresses. This reliably
+detects failed apps, APIs, Keycloak, and Grafana without OCI public-IP hairpin
+false positives. It does not validate public DNS, TLS, NAT, or the Internet path.
+Use a genuinely external uptime checker for those tests; do not point an
+in-cluster probe at the cluster's own OCI public IP. External alert delivery and
+external uptime checks remain the two deliberate integrations requiring a
+provider/destination choice.
 
 ## Validation
 

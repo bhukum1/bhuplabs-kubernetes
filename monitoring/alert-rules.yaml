@@ -7,32 +7,24 @@ metadata:
     release: kps
 spec:
   groups:
-    - name: public-endpoints
+    - name: synthetic-endpoints
       rules:
-        - alert: PublicEndpointDown
+        - alert: InternalEndpointDown
           expr: probe_success{job=~".*blackbox.*"} == 0
           for: 2m
           labels:
             severity: critical
           annotations:
-            summary: "Public endpoint is unavailable"
-            description: "{{ $labels.instance }} has failed external probes for more than two minutes."
-        - alert: PublicEndpointSlow
+            summary: "Internal application endpoint is unavailable"
+            description: "{{ $labels.instance }} has failed cluster-local probes for more than two minutes."
+        - alert: InternalEndpointSlow
           expr: probe_duration_seconds{job=~".*blackbox.*"} > 3
           for: 10m
           labels:
             severity: warning
           annotations:
-            summary: "Public endpoint is slow"
+            summary: "Internal application endpoint is slow"
             description: "{{ $labels.instance }} has taken over three seconds for ten minutes."
-        - alert: TLSCertificateExpiresSoon
-          expr: (probe_ssl_earliest_cert_expiry - time()) < 14 * 24 * 3600
-          for: 1h
-          labels:
-            severity: warning
-          annotations:
-            summary: "TLS certificate expires within 14 days"
-            description: "The certificate used by {{ $labels.instance }} needs attention."
     - name: localshops-application
       rules:
         - alert: LocalshopsAPIMetricsUnavailable

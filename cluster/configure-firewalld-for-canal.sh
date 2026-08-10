@@ -3,6 +3,10 @@ set -euo pipefail
 
 pod_cidr="${POD_CIDR:-10.244.0.0/16}"
 zone="${FIREWALL_ZONE:-canal-pods}"
+egress_policy="${EGRESS_POLICY:-canal-egress}"
+host_monitoring_policy="${HOST_MONITORING_POLICY:-canal-hostmon}"
+oci_dns_resolver="${OCI_DNS_RESOLVER:-169.254.169.254}"
+monitoring_ports=(2381 6443 9100 10249 10250 10257 10259)
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run this script as root on every Kubernetes node." >&2
@@ -20,19 +24,49 @@ if [[ "$(firewall-cmd --state)" != "running" ]]; then
 fi
 
 # Bind only the pod CIDR to a dedicated zone and enable forwarding within that
-# zone. The zone exposes no services and retains firewalld's default INPUT reject,
-# so this does not trust pods to reach node-local services. Pod-to-public traffic
-# also remains inter-zone and denied unless it has an explicit, separate policy.
+# zone. The zone retains firewalld's default INPUT reject. The explicit ports
+# below allow Prometheus to monitor node-local Kubernetes components; they do not
+# expose those ports to public interfaces or other source zones.
 if ! firewall-cmd --permanent --get-zones | tr ' ' '\n' | grep -Fxq "$zone"; then
   firewall-cmd --permanent --new-zone="$zone"
 fi
 
 firewall-cmd --permanent --zone="$zone" --add-source="$pod_cidr"
 firewall-cmd --permanent --zone="$zone" --add-forward
+
+# Permit only HTTPS egress plus DNS to OCI's link-local resolver. The ANY egress
+# zone deliberately excludes HOST, so this policy cannot open node-local ports.
+if ! firewall-cmd --permanent --get-policies | tr ' ' '\n' | grep -Fxq "$egress_policy"; then
+  firewall-cmd --permanent --new-policy="$egress_policy"
+fi
+firewall-cmd --permanent --policy="$egress_policy" --set-target=CONTINUE
+firewall-cmd --permanent --policy="$egress_policy" --add-ingress-zone="$zone"
+firewall-cmd --permanent --policy="$egress_policy" --add-egress-zone=ANY
+firewall-cmd --permanent --policy="$egress_policy" --add-port=443/tcp
+firewall-cmd --permanent --policy="$egress_policy" \
+  --add-rich-rule="rule family=ipv4 destination address=${oci_dns_resolver} port port=53 protocol=udp accept"
+firewall-cmd --permanent --policy="$egress_policy" \
+  --add-rich-rule="rule family=ipv4 destination address=${oci_dns_resolver} port port=53 protocol=tcp accept"
+
+# Permit Prometheus pods to scrape the exact Kubernetes/node metric ports. The
+# policy handles remote node addresses; matching zone ports handle the local node.
+if ! firewall-cmd --permanent --get-policies | tr ' ' '\n' | grep -Fxq "$host_monitoring_policy"; then
+  firewall-cmd --permanent --new-policy="$host_monitoring_policy"
+fi
+firewall-cmd --permanent --policy="$host_monitoring_policy" --set-target=CONTINUE
+firewall-cmd --permanent --policy="$host_monitoring_policy" --add-ingress-zone="$zone"
+firewall-cmd --permanent --policy="$host_monitoring_policy" --add-egress-zone=trusted
+for port in "${monitoring_ports[@]}"; do
+  firewall-cmd --permanent --zone="$zone" --add-port="${port}/tcp"
+  firewall-cmd --permanent --policy="$host_monitoring_policy" --add-port="${port}/tcp"
+done
+
 firewall-cmd --check-config
 firewall-cmd --reload
 
 firewall-cmd --zone="$zone" --query-source="$pod_cidr"
 firewall-cmd --zone="$zone" --query-forward
+firewall-cmd --policy="$egress_policy" --list-all
+firewall-cmd --policy="$host_monitoring_policy" --list-all
 
-echo "firewalld permits intra-zone Canal pod forwarding for ${pod_cidr}."
+echo "firewalld permits Canal forwarding, scoped egress, and monitoring scrapes for ${pod_cidr}."
