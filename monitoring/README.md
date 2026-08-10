@@ -32,8 +32,8 @@ The chart versions are pinned to:
 - prometheus-blackbox-exporter `11.17.1`
 
 Before installing the stack on firewalld-based nodes, apply the scoped Canal
-forwarding prerequisite on every node. It permits pod-CIDR-to-pod-CIDR
-forwarding without trusting pod access to node-local host services:
+forwarding prerequisite on every node. It creates a dedicated pod-CIDR zone
+with only intra-zone forwarding enabled and no access to node-local services:
 
 ```bash
 sudo cluster/configure-firewalld-for-canal.sh

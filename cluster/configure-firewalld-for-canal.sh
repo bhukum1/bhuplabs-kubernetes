@@ -2,7 +2,7 @@
 set -euo pipefail
 
 pod_cidr="${POD_CIDR:-10.244.0.0/16}"
-zone="${FIREWALL_ZONE:-public}"
+zone="${FIREWALL_ZONE:-canal-pods}"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Run this script as root on every Kubernetes node." >&2
@@ -19,16 +19,20 @@ if [[ "$(firewall-cmd --state)" != "running" ]]; then
   exit 1
 fi
 
-# Canal workload interfaces are named cali*, not cni0. They fall through to the
-# public zone on these hosts. Allow only forwarded pod-to-pod traffic; do not put
-# the pod CIDR or a wildcard cali interface in the trusted zone because that would
-# also weaken the node-local INPUT boundary. Calico NetworkPolicy is evaluated
-# before this later firewalld forwarding hook.
-rule="rule family=\"ipv4\" source address=\"${pod_cidr}\" destination address=\"${pod_cidr}\" accept"
-firewall-cmd --permanent --zone="$zone" --add-rich-rule="$rule"
-firewall-cmd --zone="$zone" --add-rich-rule="$rule"
+# Bind only the pod CIDR to a dedicated zone and enable forwarding within that
+# zone. The zone exposes no services and retains firewalld's default INPUT reject,
+# so this does not trust pods to reach node-local services. Pod-to-public traffic
+# also remains inter-zone and denied unless it has an explicit, separate policy.
+if ! firewall-cmd --permanent --get-zones | tr ' ' '\n' | grep -Fxq "$zone"; then
+  firewall-cmd --permanent --new-zone="$zone"
+fi
 
-firewall-cmd --permanent --zone="$zone" --query-rich-rule="$rule"
-firewall-cmd --zone="$zone" --query-rich-rule="$rule"
+firewall-cmd --permanent --zone="$zone" --add-source="$pod_cidr"
+firewall-cmd --permanent --zone="$zone" --add-forward
+firewall-cmd --check-config
+firewall-cmd --reload
 
-echo "firewalld permits Calico-approved pod-to-pod forwarding for ${pod_cidr}."
+firewall-cmd --zone="$zone" --query-source="$pod_cidr"
+firewall-cmd --zone="$zone" --query-forward
+
+echo "firewalld permits intra-zone Canal pod forwarding for ${pod_cidr}."
