@@ -41,6 +41,9 @@ component scheduling.
 
 On firewalld-based nodes, run `cluster/configure-firewalld-for-canal.sh` as root on
 every node so its scoped pod-to-pod forwarding rule works with Calico NetworkPolicy.
+The script updates existing runtime rules without reloading firewalld, preserving
+Kubernetes-managed CNI and kube-proxy chains. Follow the post-reload Traefik restart
+in `cluster/README.md` after first-time setup or any manual reload.
 
 ## Prerequisites
 

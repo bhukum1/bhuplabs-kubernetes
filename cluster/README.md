@@ -18,6 +18,8 @@ These resources cover controls outside the `localshops` namespace.
   by Prometheus. Run it as root on every node before or immediately after installing
   Canal. Without this scoped zone, firewalld classifies `cali*` workload interfaces as
   public and rejects direct endpoint traffic even when Calico NetworkPolicy allows it.
+  On an already-configured node it updates runtime and permanent rules without a
+  firewalld reload, preserving Kubernetes-managed CNI and kube-proxy chains.
 - `enable-control-plane-metrics.sh` backs up the static-pod manifests outside the live
   manifest directory, then exposes the scheduler, controller-manager, and etcd metric
   listeners on the private control-plane address. Run it only after the scoped firewall
@@ -35,8 +37,9 @@ These resources cover controls outside the `localshops` namespace.
 
 ## Canal host firewall prerequisite
 
-Run this on every node. The command is idempotent, validates the persistent
-configuration, and reloads firewalld once to activate the dedicated zone:
+Run this on every node. The command is idempotent and validates the persistent
+configuration. It reloads firewalld only when creating a zone or policy for the
+first time; later runs update runtime rules without a reload:
 
 ```bash
 sudo cluster/configure-firewalld-for-canal.sh
@@ -57,6 +60,14 @@ policy is active on every node:
 ```bash
 sudo cluster/enable-control-plane-metrics.sh
 cluster/enable-kube-proxy-metrics.sh
+```
+
+The first creation of a zone or policy still requires a firewalld reload. After that
+first run—or after any manual firewalld reload—recreate CNI hostPort rules:
+
+```bash
+kubectl rollout restart daemonset/traefik -n traefik
+kubectl rollout status daemonset/traefik -n traefik --timeout=180s
 ```
 
 Do not add the pod CIDR, public NIC, a wildcard `cali*` interface, or `0.0.0.0/0` to
