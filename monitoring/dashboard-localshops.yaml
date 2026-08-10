@@ -47,7 +47,7 @@ data:
           "title": "Localshops logs",
           "type": "logs",
           "datasource": {"type": "loki", "uid": "loki"},
-          "targets": [{"expr": "{namespace=~\"localshops(-dev)?\"}", "refId": "A"}],
+          "targets": [{"expr": "{namespace=~\"localshops(-dev)?\"} !~ \"\\\"(GET|HEAD) /(health/(ready|live|startup)|metrics|api/health).*\\\" 200 OK\"", "refId": "A"}],
           "options": {"showTime": true, "showLabels": true, "wrapLogMessage": true, "prettifyLogMessage": false, "enableLogDetails": true, "sortOrder": "Descending", "dedupStrategy": "none"},
           "gridPos": {"h": 12, "w": 24, "x": 0, "y": 13}
         }

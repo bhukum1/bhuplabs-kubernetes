@@ -78,12 +78,17 @@ alloy:
       }
 
       loki.source.kubernetes "pod_logs" {
-        targets       = discovery.relabel.pod_logs.output
-        forward_to    = [loki.process.pod_logs.receiver]
-        tail_from_end = true
+        targets    = discovery.relabel.pod_logs.output
+        forward_to = [loki.process.pod_logs.receiver]
       }
 
       loki.process "pod_logs" {
+        // Health probes are represented by Prometheus/Blackbox metrics. Keep
+        // failed checks, but drop successful ones to reduce noise and storage.
+        stage.drop {
+          expression          = `.*"(GET|HEAD) /(health/(ready|live|startup)|metrics|api/health)(\?[^ ]*)? HTTP/[^"]+" 200 OK.*`
+          drop_counter_reason = "successful_health_check"
+        }
         stage.static_labels {
           values = {
             cluster = "bhuplabs-pilot",

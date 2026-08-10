@@ -118,6 +118,45 @@ dashboard appears under **Dashboards**, and cluster/app logs are searchable in
 {namespace=~"localshops(-dev)?"} |= "ERROR"
 ```
 
+In Grafana, open **Explore**, select the **Loki** data source, paste a query,
+choose a time range, and select **Run query**. Expand a row to see its namespace,
+pod, container, and application labels.
+
+Dev API logs:
+
+```logql
+{namespace="localshops-dev", app="api"}
+```
+
+Production API and web logs:
+
+```logql
+{namespace="localshops", app=~"api|web"}
+```
+
+Errors and exceptions across both environments:
+
+```logql
+{namespace=~"localshops(-dev)?", app=~"api|web"} |~ "(?i)(error|exception|traceback| 5[0-9]{2} )"
+```
+
+Order-related messages currently emitted by the API:
+
+```logql
+{namespace=~"localshops(-dev)?", app="api"} |~ "(?i)(order|checkout)"
+```
+
+The dashboard and collector omit successful health/metrics requests. Failed checks
+remain visible and continue to generate metrics and alerts.
+
+For immediate command-line troubleshooting without Loki:
+
+```bash
+kubectl logs -n localshops-dev deployment/api --since=30m -f
+kubectl logs -n localshops-dev deployment/web --since=30m -f
+kubectl logs -n localshops deployment/api --since=30m -f
+```
+
 Prometheus evaluates the rules and Alertmanager displays active alerts in
 Grafana. The current receiver is deliberately `null`: external delivery is not
 enabled until a notification credential and destination are supplied. Add one
