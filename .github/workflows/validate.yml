@@ -1,0 +1,46 @@
+name: Validate Kubernetes platform
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: infrastructure-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install patched Trivy scanner
+        uses: aquasecurity/setup-trivy@3fb12ec12f41e471780db15c232d5dd185dcb514 # v0.2.6
+        with:
+          version: v0.69.3
+          cache: true
+
+      - name: Scan repository for secrets
+        run: |
+          trivy fs \
+            --scanners secret \
+            --skip-version-check \
+            --exit-code 1 \
+            .
+
+      - name: Validate shell scripts
+        run: |
+          while IFS= read -r -d '' script; do
+            bash -n "$script"
+          done < <(find cluster vault/scripts -type f -name '*.sh' -print0)
+
+      - name: Validate exported workflows
+        run: jq -e . n8n/workflows/workflows.json >/dev/null

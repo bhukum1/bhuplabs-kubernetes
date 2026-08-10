@@ -1,0 +1,47 @@
+# Cluster production hardening
+
+These resources cover controls outside the `localshops` namespace.
+
+- `harden-control-plane.sh` enables Kubernetes Secret encryption at rest and bounded,
+  metadata-focused API audit logging on the kubeadm control plane. The encryption key is
+  generated on the control-plane host and is never committed to this repository.
+- `etcd-backup.yaml` takes a six-hourly etcd snapshot, retains current and previous copies,
+  and uses an encrypted Kubernetes Secret containing a read-only mounted backup client
+  certificate. The job runs non-root.
+- `keycloak-backup.yaml` writes a verified six-hourly Keycloak database dump to `node01`.
+- `keycloak-network-policies.yaml` restricts Keycloak and its PostgreSQL service ingress.
+- Network policy enforcement uses the version-pinned official Calico Canal deployment,
+  with Flannel retaining VXLAN transport over `wg0` and Calico enforcing policy.
+- `tune-grafana-vault-resources.sh` removes an unnecessary 250m Vault init-container CPU
+  reservation that otherwise prevents Grafana from scheduling on `node01`. Reapply it
+  after a monitoring Helm upgrade unless the same annotations are added to Helm values.
+- `tune-traefik-native-lb.sh` makes Traefik use Kubernetes ClusterIP load balancing for
+  Gateway API and Ingress backends. This preserves reliable cross-node routing through
+  kube-proxy while Calico continues to enforce workload network policies. Reapply it after
+  a Traefik Helm upgrade unless both native-LB settings are stored in Helm values.
+
+## Recovery boundary
+
+The database copies on `node01` protect against loss of the application node (`node02`).
+The etcd snapshots remain on the control-plane node. These copies reduce recovery time but
+do not replace off-cluster disaster recovery.
+
+Replicate all of the following to encrypted off-cluster storage:
+
+- `/var/backups/etcd/etcd-current.db` and `etcd-previous.db`;
+- `/etc/kubernetes/security/encryption-config.yaml`;
+- the newest Localshops and Keycloak custom-format PostgreSQL dumps; and
+- a separately protected copy of the Kubernetes PKI required by the documented kubeadm
+  recovery procedure.
+
+An etcd snapshot without its encryption provider key cannot decrypt Kubernetes Secrets.
+OCI Object Storage credentials, bucket retention policy, and IAM policy are external
+account resources and must never be committed here. Use a private bucket, a dedicated
+write-only backup identity where practical, object versioning/retention, and quarterly
+restore drills.
+
+## Control-plane safety
+
+Static-pod manifest backups belong in `/etc/kubernetes/manifest-backups`, never in
+`/etc/kubernetes/manifests`; kubelet treats every file in the latter directory as a live
+pod manifest. Take and validate an etcd snapshot before rerunning control-plane hardening.

@@ -1,0 +1,45 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: vault-injection-smoke-test
+  namespace: n8n
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/agent-pre-populate-only: "true"
+    vault.hashicorp.com/role: n8n
+    vault.hashicorp.com/service: http://vault-active.vault.svc:8200
+    vault.hashicorp.com/agent-inject-secret-encryption-key: secret/data/n8n/application
+    vault.hashicorp.com/agent-inject-template-encryption-key: |
+      {{- with secret "secret/data/n8n/application" -}}
+      {{ .Data.data.encryption_key }}
+      {{- end }}
+    vault.hashicorp.com/agent-inject-secret-postgres-password: secret/data/n8n/postgres
+    vault.hashicorp.com/agent-inject-template-postgres-password: |
+      {{- with secret "secret/data/n8n/postgres" -}}
+      {{ .Data.data.password }}
+      {{- end }}
+spec:
+  restartPolicy: Never
+  serviceAccountName: n8n-vault
+  containers:
+    - name: verify
+      image: busybox:1.37
+      command:
+        - sh
+        - -c
+        - test -s /vault/secrets/encryption-key && test -s /vault/secrets/postgres-password && echo vault-files-present
+      securityContext:
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+        runAsNonRoot: true
+        runAsUser: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      resources:
+        requests:
+          cpu: 5m
+          memory: 8Mi
+        limits:
+          cpu: 50m
+          memory: 32Mi

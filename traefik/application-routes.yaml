@@ -1,0 +1,213 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: n8n-tls
+  namespace: n8n
+spec:
+  secretName: n8n-tls
+  dnsNames:
+    - n8n.bhuplabs.dev
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: n8n
+  namespace: n8n
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: web
+      port: 8000
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: websecure
+      hostname: n8n.bhuplabs.dev
+      port: 8443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: n8n-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: edge-healthz
+  namespace: n8n
+spec:
+  parentRefs:
+    - name: n8n
+      sectionName: web
+  rules:
+    - matches:
+        - path:
+            type: Exact
+            value: /healthz
+      filters:
+        - type: URLRewrite
+          urlRewrite:
+            path:
+              type: ReplaceFullPath
+              replaceFullPath: /ping
+      backendRefs:
+        - name: traefik-health
+          namespace: traefik
+          port: 8080
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: n8n-http-redirect
+  namespace: n8n
+spec:
+  parentRefs:
+    - name: n8n
+      sectionName: web
+  hostnames:
+    - n8n.bhuplabs.dev
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: n8n-public-endpoints
+  namespace: n8n
+spec:
+  parentRefs:
+    - name: n8n
+      sectionName: websecure
+  hostnames:
+    - n8n.bhuplabs.dev
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /webhook
+        - path:
+            type: PathPrefix
+            value: /webhook-test
+        - path:
+            type: PathPrefix
+            value: /webhook-waiting
+        - path:
+            type: PathPrefix
+            value: /form
+        - path:
+            type: PathPrefix
+            value: /form-test
+      backendRefs:
+        - name: n8n
+          port: 5678
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: n8n
+  namespace: n8n
+spec:
+  parentRefs:
+    - name: n8n
+      sectionName: websecure
+  hostnames:
+    - n8n.bhuplabs.dev
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: n8n-oauth2-proxy
+          port: 4180
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: grafana-tls
+  namespace: monitoring
+spec:
+  secretName: grafana-tls
+  dnsNames:
+    - grafana.bhuplabs.dev
+  issuerRef:
+    kind: ClusterIssuer
+    name: letsencrypt-prod
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  gatewayClassName: traefik
+  listeners:
+    - name: web
+      hostname: grafana.bhuplabs.dev
+      port: 8000
+      protocol: HTTP
+      allowedRoutes:
+        namespaces:
+          from: Same
+    - name: websecure
+      hostname: grafana.bhuplabs.dev
+      port: 8443
+      protocol: HTTPS
+      tls:
+        mode: Terminate
+        certificateRefs:
+          - kind: Secret
+            name: grafana-tls
+      allowedRoutes:
+        namespaces:
+          from: Same
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana-http-redirect
+  namespace: monitoring
+spec:
+  parentRefs:
+    - name: grafana
+      sectionName: web
+  hostnames:
+    - grafana.bhuplabs.dev
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            statusCode: 301
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: grafana
+  namespace: monitoring
+spec:
+  parentRefs:
+    - name: grafana
+      sectionName: websecure
+  hostnames:
+    - grafana.bhuplabs.dev
+  rules:
+    - matches:
+        - path:
+            type: PathPrefix
+            value: /
+      backendRefs:
+        - name: kps-grafana
+          port: 80

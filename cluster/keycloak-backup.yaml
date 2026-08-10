@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: keycloak-backup-pv-node01
+spec:
+  capacity:
+    storage: 5Gi
+  volumeMode: Filesystem
+  accessModes: [ReadWriteOnce]
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-retain
+  local:
+    path: /var/lib/keycloak-secondary/backups
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values: [node01]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: keycloak-backups-secondary
+  namespace: keycloak
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-retain
+  volumeName: keycloak-backup-pv-node01
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: keycloak-postgres-backup
+  namespace: keycloak
+spec:
+  schedule: "15 */6 * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 1800
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 900
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: keycloak-backup
+          annotations:
+            vault.hashicorp.com/agent-inject: "true"
+            vault.hashicorp.com/agent-inject-secret-database-password: secret/data/keycloak/database
+            vault.hashicorp.com/agent-inject-template-database-password: |
+              {{- with secret "secret/data/keycloak/database" -}}
+              {{ .Data.data.password }}
+              {{- end }}
+            vault.hashicorp.com/agent-limits-cpu: 100m
+            vault.hashicorp.com/agent-pre-populate-only: "true"
+            vault.hashicorp.com/agent-requests-cpu: "0"
+            vault.hashicorp.com/role: keycloak-postgres
+            vault.hashicorp.com/service: http://vault-active.vault.svc:8200
+        spec:
+          serviceAccountName: keycloak-postgres-vault
+          enableServiceLinks: false
+          restartPolicy: OnFailure
+          nodeSelector:
+            kubernetes.io/hostname: node01
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            fsGroup: 999
+            fsGroupChangePolicy: OnRootMismatch
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: backup
+              image: postgres:16-bookworm
+              command: ["sh", "-ec"]
+              args:
+                - |
+                  export PGPASSWORD="$(cat /vault/secrets/database-password)"
+                  stamp="$(date -u +%Y%m%dT%H%M%SZ)"
+                  target="/backups/keycloak-${stamp}.dump"
+                  pg_dump -Fc -h keycloak-postgres -U keycloak -d keycloak -f "$target"
+                  pg_restore --list "$target" >/dev/null
+                  find /backups -type f -name 'keycloak-*.dump' -mtime +30 -delete
+                  size="$(du -h "$target" | cut -f1)"
+                  printf 'verified Keycloak backup: keycloak-%s.dump (%s)\n' "$stamp" "$size"
+              resources:
+                requests:
+                  cpu: 25m
+                  memory: 64Mi
+                limits:
+                  cpu: 250m
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                readOnlyRootFilesystem: true
+              volumeMounts:
+                - name: backups
+                  mountPath: /backups
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: backups
+              persistentVolumeClaim:
+                claimName: keycloak-backups-secondary
+            - name: tmp
+              emptyDir: {}

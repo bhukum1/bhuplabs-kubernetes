@@ -1,0 +1,19 @@
+grafana:
+  enabled: true
+  admin:
+    # This Secret pre-dates the Vault migration and is intentionally not
+    # exported. Create it out-of-band before installing the chart.
+    existingSecret: grafana-admin
+    userKey: admin-user
+    passwordKey: admin-password
+  ingress:
+    enabled: false
+  nodeSelector:
+    kubernetes.io/hostname: node01
+  persistence:
+    enabled: true
+    existingClaim: grafana-data
+
+prometheus:
+  prometheusSpec:
+    retention: 7d

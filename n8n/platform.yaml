@@ -1,0 +1,333 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: n8n
+  labels:
+    vault-injection: enabled
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: n8n-local-pv-node01
+spec:
+  capacity:
+    storage: 20Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-retain
+  local:
+    path: /var/lib/n8n
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - node01
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: n8n-data
+  namespace: n8n
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  volumeName: n8n-local-pv-node01
+  resources:
+    requests:
+      storage: 20Gi
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: n8n-postgres-local-pv-node01
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-retain
+  local:
+    path: /var/lib/n8n-postgres
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - node01
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: n8n-postgres-data
+  namespace: n8n
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  volumeName: n8n-postgres-local-pv-node01
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: n8n-vault
+  namespace: n8n
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: postgres-vault
+  namespace: n8n
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n-postgres
+  namespace: n8n
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: n8n-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: n8n-postgres
+  namespace: n8n
+spec:
+  serviceName: n8n-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: n8n-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: n8n-postgres
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-requests-cpu: "100m"
+        vault.hashicorp.com/role: postgres
+        vault.hashicorp.com/service: http://vault-active.vault.svc:8200
+        vault.hashicorp.com/agent-inject-secret-postgres-password: secret/data/n8n/postgres
+        vault.hashicorp.com/agent-inject-template-postgres-password: |
+          {{- with secret "secret/data/n8n/postgres" -}}
+          {{ .Data.data.password }}
+          {{- end }}
+    spec:
+      serviceAccountName: postgres-vault
+      nodeSelector:
+        kubernetes.io/hostname: node01
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: postgres
+          image: postgres:16-bookworm
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -ec
+          args:
+            - |
+              export POSTGRES_PASSWORD="$(cat /vault/secrets/postgres-password)"
+              exec docker-entrypoint.sh postgres
+          env:
+            - name: POSTGRES_DB
+              value: n8n
+            - name: POSTGRES_USER
+              value: n8n
+            - name: POSTGRES_INITDB_ARGS
+              value: --auth-host=scram-sha-256
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 10
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: postgres-data
+          persistentVolumeClaim:
+            claimName: n8n-postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: n8n
+  namespace: n8n
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: n8n
+  ports:
+    - name: http
+      port: 5678
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: n8n
+  namespace: n8n
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: n8n
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: n8n
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-requests-cpu: "20m"
+        vault.hashicorp.com/role: n8n
+        vault.hashicorp.com/service: http://vault-active.vault.svc:8200
+        vault.hashicorp.com/agent-inject-secret-encryption-key: secret/data/n8n/application
+        vault.hashicorp.com/agent-inject-template-encryption-key: |
+          {{- with secret "secret/data/n8n/application" -}}
+          {{ .Data.data.encryption_key }}
+          {{- end }}
+        vault.hashicorp.com/agent-inject-secret-postgres-password: secret/data/n8n/postgres
+        vault.hashicorp.com/agent-inject-template-postgres-password: |
+          {{- with secret "secret/data/n8n/postgres" -}}
+          {{ .Data.data.password }}
+          {{- end }}
+    spec:
+      serviceAccountName: n8n-vault
+      nodeSelector:
+        kubernetes.io/hostname: node01
+      securityContext:
+        fsGroup: 1000
+      initContainers:
+        - name: prepare-data-directory
+          image: busybox:1.37
+          command:
+            - sh
+            - -c
+            - mkdir -p /home/node/.n8n && chown -R 1000:1000 /home/node/.n8n
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: n8n-data
+              mountPath: /home/node/.n8n
+      containers:
+        - name: n8n
+          image: docker.n8n.io/n8nio/n8n@sha256:cda6bafc7bb4873533e7affb82d1bd47282a7614bdf83242c2293f8ff281261a
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              export N8N_ENCRYPTION_KEY="$(cat /vault/secrets/encryption-key)"
+              export DB_POSTGRESDB_PASSWORD="$(cat /vault/secrets/postgres-password)"
+              exec /docker-entrypoint.sh
+          env:
+            - name: DB_TYPE
+              value: postgresdb
+            - name: DB_POSTGRESDB_HOST
+              value: n8n-postgres
+            - name: DB_POSTGRESDB_PORT
+              value: "5432"
+            - name: DB_POSTGRESDB_DATABASE
+              value: n8n
+            - name: DB_POSTGRESDB_USER
+              value: n8n
+            - name: DB_POSTGRESDB_SCHEMA
+              value: public
+            - name: DB_POSTGRESDB_SSL_ENABLED
+              value: "false"
+            - name: N8N_HOST
+              value: n8n.bhuplabs.dev
+            - name: N8N_PROTOCOL
+              value: https
+            - name: N8N_PORT
+              value: "5678"
+            - name: N8N_SECURE_COOKIE
+              value: "true"
+            - name: N8N_WEBHOOK_URL
+              value: https://n8n.bhuplabs.dev/
+            - name: N8N_EDITOR_BASE_URL
+              value: https://n8n.bhuplabs.dev/
+          ports:
+            - name: http
+              containerPort: 5678
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 1Gi
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 60
+            periodSeconds: 20
+          volumeMounts:
+            - name: n8n-data
+              mountPath: /home/node/.n8n
+      volumes:
+        - name: n8n-data
+          persistentVolumeClaim:
+            claimName: n8n-data

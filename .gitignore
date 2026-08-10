@@ -1,0 +1,22 @@
+# Never commit secret material or cluster exports.
+*.key
+*.pem
+*.p12
+*.snap
+*.token
+*.secret
+*secret*.yaml
+bootstrap.json
+secrets/
+kubeconfig*
+*.tfstate
+*.tfstate.*
+values.local.yaml
+
+# Local tooling
+.DS_Store
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/

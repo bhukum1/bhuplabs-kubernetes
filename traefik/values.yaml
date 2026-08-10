@@ -1,0 +1,111 @@
+deployment:
+  enabled: true
+  kind: DaemonSet
+  terminationGracePeriodSeconds: 60
+
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0
+
+ingressClass:
+  enabled: true
+  isDefaultClass: false
+  name: traefik
+
+providers:
+  kubernetesCRD:
+    enabled: false
+  kubernetesIngress:
+    enabled: true
+    ingressClass: traefik
+    publishedService:
+      enabled: false
+    ingressEndpoint:
+      ip: 140.245.252.229
+  kubernetesGateway:
+    enabled: true
+    statusAddress:
+      ip: 140.245.252.229
+      service:
+        enabled: false
+
+gateway:
+  enabled: false
+
+gatewayClass:
+  enabled: true
+  name: traefik
+
+api:
+  dashboard: false
+
+log:
+  level: INFO
+
+accessLog:
+  enabled: true
+
+ports:
+  metrics:
+    port: 9101
+  web:
+    port: 8000
+    containerPort: 8000
+    hostPort: 80
+    exposedPort: 80
+  websecure:
+    port: 8443
+    containerPort: 8443
+    hostPort: 443
+    exposedPort: 443
+    http:
+      maxHeaderBytes: 1048576
+
+service:
+  enabled: false
+
+hostNetwork: false
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - master
+                - node01
+
+tolerations:
+  - effect: NoSchedule
+    key: node-role.kubernetes.io/control-plane
+    operator: Exists
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+podSecurityContext:
+  runAsGroup: 65532
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault

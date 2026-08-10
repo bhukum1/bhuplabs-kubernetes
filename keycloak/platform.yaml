@@ -1,0 +1,298 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: keycloak
+  labels:
+    vault-injection: enabled
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keycloak-vault
+  namespace: keycloak
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: keycloak-postgres-vault
+  namespace: keycloak
+---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: keycloak-postgres-local-pv-master
+spec:
+  capacity:
+    storage: 10Gi
+  volumeMode: Filesystem
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-retain
+  local:
+    path: /var/lib/keycloak-postgres
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+        - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+                - master
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: keycloak-postgres-data
+  namespace: keycloak
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-retain
+  volumeName: keycloak-postgres-local-pv-master
+  resources:
+    requests:
+      storage: 10Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-postgres
+  namespace: keycloak
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: keycloak-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: keycloak-postgres
+  namespace: keycloak
+spec:
+  serviceName: keycloak-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak-postgres
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak-postgres
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-requests-cpu: "0"
+        vault.hashicorp.com/agent-limits-cpu: 100m
+        vault.hashicorp.com/role: keycloak-postgres
+        vault.hashicorp.com/service: http://vault-active.vault.svc:8200
+        vault.hashicorp.com/agent-inject-secret-database-password: secret/data/keycloak/database
+        vault.hashicorp.com/agent-inject-template-database-password: |
+          {{- with secret "secret/data/keycloak/database" -}}
+          {{ .Data.data.password }}
+          {{- end }}
+    spec:
+      serviceAccountName: keycloak-postgres-vault
+      nodeSelector:
+        kubernetes.io/hostname: master
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+      containers:
+        - name: postgres
+          image: postgres:16-bookworm
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -ec
+          args:
+            - |
+              export POSTGRES_PASSWORD="$(cat /vault/secrets/database-password)"
+              exec docker-entrypoint.sh postgres
+          env:
+            - name: POSTGRES_DB
+              value: keycloak
+            - name: POSTGRES_USER
+              value: keycloak
+            - name: POSTGRES_INITDB_ARGS
+              value: --auth-host=scram-sha-256
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - name: postgres
+              containerPort: 5432
+          resources:
+            requests:
+              cpu: "0"
+              memory: 192Mi
+            limits:
+              cpu: 300m
+              memory: 512Mi
+          startupProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            periodSeconds: 10
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: keycloak-postgres-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  namespace: keycloak
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: keycloak
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: keycloak
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-pre-populate-only: "true"
+        vault.hashicorp.com/agent-requests-cpu: "0"
+        vault.hashicorp.com/agent-limits-cpu: 100m
+        vault.hashicorp.com/role: keycloak
+        vault.hashicorp.com/service: http://vault-active.vault.svc:8200
+        vault.hashicorp.com/agent-inject-secret-database-password: secret/data/keycloak/database
+        vault.hashicorp.com/agent-inject-template-database-password: |
+          {{- with secret "secret/data/keycloak/database" -}}
+          {{ .Data.data.password }}
+          {{- end }}
+        vault.hashicorp.com/agent-inject-secret-bootstrap-password: secret/data/keycloak/bootstrap
+        vault.hashicorp.com/agent-inject-template-bootstrap-password: |
+          {{- with secret "secret/data/keycloak/bootstrap" -}}
+          {{ .Data.data.admin_password }}
+          {{- end }}
+    spec:
+      serviceAccountName: keycloak-vault
+      nodeSelector:
+        kubernetes.io/hostname: master
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+      securityContext:
+        fsGroup: 1000
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: keycloak
+          image: quay.io/keycloak/keycloak:26.7.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/bash
+            - -ec
+          args:
+            - |
+              export KC_DB_PASSWORD="$(cat /vault/secrets/database-password)"
+              export KC_BOOTSTRAP_ADMIN_PASSWORD="$(cat /vault/secrets/bootstrap-password)"
+              exec /opt/keycloak/bin/kc.sh start
+          env:
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              value: admin
+            - name: KC_DB
+              value: postgres
+            - name: KC_DB_URL_HOST
+              value: keycloak-postgres
+            - name: KC_DB_URL_PORT
+              value: "5432"
+            - name: KC_DB_URL_DATABASE
+              value: keycloak
+            - name: KC_DB_USERNAME
+              value: keycloak
+            - name: KC_HOSTNAME
+              value: https://auth.bhuplabs.dev
+            - name: KC_HOSTNAME_STRICT
+              value: "true"
+            - name: KC_HTTP_ENABLED
+              value: "true"
+            - name: KC_PROXY_HEADERS
+              value: xforwarded
+            - name: KC_HEALTH_ENABLED
+              value: "true"
+            - name: KC_METRICS_ENABLED
+              value: "true"
+            - name: KC_CACHE
+              value: local
+            - name: JAVA_OPTS_KC_HEAP
+              value: -XX:InitialRAMPercentage=25 -XX:MaxRAMPercentage=70
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9000
+          resources:
+            requests:
+              cpu: "0"
+              memory: 768Mi
+            limits:
+              cpu: 500m
+              memory: 1536Mi
+          startupProbe:
+            httpGet:
+              path: /health/started
+              port: management
+            failureThreshold: 60
+            periodSeconds: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: management
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: management
+            periodSeconds: 20

@@ -1,0 +1,31 @@
+grafana:
+  deploymentStrategy:
+    type: Recreate
+
+  podAnnotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/agent-pre-populate-only: "true"
+    vault.hashicorp.com/role: grafana-oidc
+    vault.hashicorp.com/service: http://vault-active.vault.svc:8200
+    vault.hashicorp.com/agent-inject-secret-oidc-client-secret: secret/data/keycloak/clients/grafana
+    vault.hashicorp.com/agent-inject-template-oidc-client-secret: |
+      {{- with secret "secret/data/keycloak/clients/grafana" -}}
+      {{ .Data.data.client_secret }}
+      {{- end }}
+
+  env:
+    GF_SERVER_ROOT_URL: https://grafana.bhuplabs.dev
+    GF_AUTH_OAUTH_ALLOW_INSECURE_EMAIL_LOOKUP: "true"
+    GF_AUTH_GENERIC_OAUTH_ENABLED: "true"
+    GF_AUTH_GENERIC_OAUTH_NAME: Bhuplabs SSO
+    GF_AUTH_GENERIC_OAUTH_ALLOW_SIGN_UP: "true"
+    GF_AUTH_GENERIC_OAUTH_CLIENT_ID: grafana
+    GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET__FILE: /vault/secrets/oidc-client-secret
+    GF_AUTH_GENERIC_OAUTH_SCOPES: openid profile email
+    GF_AUTH_GENERIC_OAUTH_AUTH_URL: https://auth.bhuplabs.dev/realms/master/protocol/openid-connect/auth
+    GF_AUTH_GENERIC_OAUTH_TOKEN_URL: https://auth.bhuplabs.dev/realms/master/protocol/openid-connect/token
+    GF_AUTH_GENERIC_OAUTH_API_URL: https://auth.bhuplabs.dev/realms/master/protocol/openid-connect/userinfo
+    GF_AUTH_GENERIC_OAUTH_USE_PKCE: "true"
+    GF_AUTH_GENERIC_OAUTH_ROLE_ATTRIBUTE_PATH: "contains(groups[*], 'platform-admins') && 'Admin' || contains(groups[*], 'grafana-viewers') && 'Viewer' || 'Viewer'"
+    GF_AUTH_GENERIC_OAUTH_ALLOW_ASSIGN_GRAFANA_ADMIN: "true"
+    GF_AUTH_GENERIC_OAUTH_SKIP_ORG_ROLE_SYNC: "false"
