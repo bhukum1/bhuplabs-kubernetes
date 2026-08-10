@@ -1,0 +1,234 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-localshops-http
+  namespace: monitoring
+  labels:
+    grafana_dashboard: "1"
+data:
+  localshops-http.json: |-
+    {
+      "annotations": {"list": []},
+      "editable": true,
+      "graphTooltip": 1,
+      "links": [],
+      "panels": [
+        {
+          "title": "Gateway requests / second",
+          "description": "All Localshops production and development traffic observed by Traefik.",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "sum(rate(traefik_service_requests_total{service=~\"$gateway_service\",code=~\"[1-5]..\"}[$__rate_interval])) or vector(0)", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "reqps", "decimals": 2}, "overrides": []},
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+        },
+        {
+          "title": "Gateway 4xx percentage",
+          "description": "Client-error responses as a percentage of Localshops gateway traffic.",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "100 * (sum(rate(traefik_service_requests_total{service=~\"$gateway_service\",code=~\"4..\"}[$__rate_interval])) or vector(0)) / clamp_min((sum(rate(traefik_service_requests_total{service=~\"$gateway_service\",code=~\"[1-5]..\"}[$__rate_interval])) or vector(0)), 0.001)", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "percent", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]}}, "overrides": []},
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+        },
+        {
+          "title": "Gateway 5xx percentage",
+          "description": "Server-error responses as a percentage of Localshops gateway traffic.",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "100 * (sum(rate(traefik_service_requests_total{service=~\"$gateway_service\",code=~\"5..\"}[$__rate_interval])) or vector(0)) / clamp_min((sum(rate(traefik_service_requests_total{service=~\"$gateway_service\",code=~\"[1-5]..\"}[$__rate_interval])) or vector(0)), 0.001)", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "percent", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]}}, "overrides": []},
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+        },
+        {
+          "title": "Gateway p95 latency",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(traefik_service_request_duration_seconds_bucket{service=~\"$gateway_service\"}[$__rate_interval]))) or vector(0)", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "s", "decimals": 3, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 1}]}}, "overrides": []},
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+        },
+        {
+          "title": "Gateway request rate by status class",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {"expr": "sum(rate(traefik_service_requests_total{service=~\"$gateway_service\",code=~\"2..\"}[$__rate_interval]))", "legendFormat": "2xx", "refId": "A"},
+            {"expr": "sum(rate(traefik_service_requests_total{service=~\"$gateway_service\",code=~\"3..\"}[$__rate_interval]))", "legendFormat": "3xx", "refId": "B"},
+            {"expr": "sum(rate(traefik_service_requests_total{service=~\"$gateway_service\",code=~\"4..\"}[$__rate_interval]))", "legendFormat": "4xx", "refId": "C"},
+            {"expr": "sum(rate(traefik_service_requests_total{service=~\"$gateway_service\",code=~\"5..\"}[$__rate_interval]))", "legendFormat": "5xx", "refId": "D"}
+          ],
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+        },
+        {
+          "title": "Gateway request rate by exact status code",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "sum by (code) (rate(traefik_service_requests_total{service=~\"$gateway_service\",code=~\"[1-5]..\"}[$__rate_interval]))", "legendFormat": "HTTP {{code}}", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+        },
+        {
+          "title": "API requests / second",
+          "description": "FastAPI requests excluding readiness and liveness probes.",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "sum(rate(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\"}[$__rate_interval])) or vector(0)", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "reqps", "decimals": 2}, "overrides": []},
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 12}
+        },
+        {
+          "title": "API 4xx percentage",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "100 * (sum(rate(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\",status_code=~\"4..\"}[$__rate_interval])) or vector(0)) / clamp_min((sum(rate(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\"}[$__rate_interval])) or vector(0)), 0.001)", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "percent", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 5}, {"color": "red", "value": 20}]}}, "overrides": []},
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 12}
+        },
+        {
+          "title": "API 5xx percentage",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "100 * (sum(rate(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\",status_code=~\"5..\"}[$__rate_interval])) or vector(0)) / clamp_min((sum(rate(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\"}[$__rate_interval])) or vector(0)), 0.001)", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "percent", "decimals": 2, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 1}, {"color": "red", "value": 5}]}}, "overrides": []},
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 12}
+        },
+        {
+          "title": "API p95 latency",
+          "type": "stat",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "histogram_quantile(0.95, sum by (le) (rate(localshops_http_request_duration_seconds_bucket{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\"}[$__rate_interval]))) or vector(0)", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "s", "decimals": 3, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "yellow", "value": 0.5}, {"color": "red", "value": 1}]}}, "overrides": []},
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 12}
+        },
+        {
+          "title": "API request rate by status class",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [
+            {"expr": "sum(rate(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\",status_code=~\"2..\"}[$__rate_interval]))", "legendFormat": "2xx", "refId": "A"},
+            {"expr": "sum(rate(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\",status_code=~\"3..\"}[$__rate_interval]))", "legendFormat": "3xx", "refId": "B"},
+            {"expr": "sum(rate(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\",status_code=~\"4..\"}[$__rate_interval]))", "legendFormat": "4xx", "refId": "C"},
+            {"expr": "sum(rate(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\",status_code=~\"5..\"}[$__rate_interval]))", "legendFormat": "5xx", "refId": "D"}
+          ],
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+        },
+        {
+          "title": "API request rate by exact status code",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "sum by (status_code) (rate(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\"}[$__rate_interval]))", "legendFormat": "HTTP {{status_code}}", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+        },
+        {
+          "title": "API request rate by route",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "sum by (method, route) (rate(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\"}[$__rate_interval]))", "legendFormat": "{{method}} {{route}}", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24}
+        },
+        {
+          "title": "API 4xx and 5xx rate by route",
+          "type": "timeseries",
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "targets": [{"expr": "sum by (status_code, method, route) (rate(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\",route=~\"$route\",route!~\"/health/(live|ready|startup)\",status_code=~\"[45]..\"}[$__rate_interval]))", "legendFormat": "HTTP {{status_code}} {{method}} {{route}}", "refId": "A"}],
+          "fieldConfig": {"defaults": {"unit": "reqps"}, "overrides": []},
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24}
+        },
+        {
+          "title": "Recent API errors and HTTP 4xx/5xx logs",
+          "type": "logs",
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [{"expr": "{namespace=~\"$namespace\", app=\"api\"} |~ \"(?i)(error|exception|traceback|\\\" [45][0-9]{2} )\"", "refId": "A"}],
+          "options": {"showTime": true, "showLabels": true, "wrapLogMessage": true, "prettifyLogMessage": false, "enableLogDetails": true, "sortOrder": "Descending", "dedupStrategy": "none"},
+          "gridPos": {"h": 10, "w": 24, "x": 0, "y": 32}
+        }
+      ],
+      "refresh": "30s",
+      "schemaVersion": 41,
+      "tags": ["localshops", "http", "api", "sre"],
+      "templating": {
+        "list": [
+          {
+            "name": "gateway_service",
+            "label": "Gateway service",
+            "type": "query",
+            "datasource": {"type": "prometheus", "uid": "prometheus"},
+            "definition": "label_values(traefik_service_requests_total{service=~\".*localshops.*\"}, service)",
+            "query": {"query": "label_values(traefik_service_requests_total{service=~\".*localshops.*\"}, service)", "refId": "PrometheusVariableQueryEditor-VariableQuery"},
+            "includeAll": true,
+            "allValue": ".*localshops.*",
+            "multi": true,
+            "refresh": 1,
+            "sort": 1,
+            "current": {"selected": true, "text": ["All"], "value": ["$__all"]}
+          },
+          {
+            "name": "environment",
+            "label": "API environment",
+            "type": "query",
+            "datasource": {"type": "prometheus", "uid": "prometheus"},
+            "definition": "label_values(localshops_http_requests_total, environment)",
+            "query": {"query": "label_values(localshops_http_requests_total, environment)", "refId": "PrometheusVariableQueryEditor-VariableQuery"},
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "refresh": 1,
+            "sort": 1,
+            "current": {"selected": true, "text": ["All"], "value": ["$__all"]}
+          },
+          {
+            "name": "namespace",
+            "label": "API namespace",
+            "type": "query",
+            "datasource": {"type": "prometheus", "uid": "prometheus"},
+            "definition": "label_values(localshops_http_requests_total{environment=~\"$environment\"}, namespace)",
+            "query": {"query": "label_values(localshops_http_requests_total{environment=~\"$environment\"}, namespace)", "refId": "PrometheusVariableQueryEditor-VariableQuery"},
+            "includeAll": true,
+            "allValue": "localshops(-dev)?",
+            "multi": true,
+            "refresh": 1,
+            "sort": 1,
+            "current": {"selected": true, "text": ["All"], "value": ["$__all"]}
+          },
+          {
+            "name": "method",
+            "label": "HTTP method",
+            "type": "query",
+            "datasource": {"type": "prometheus", "uid": "prometheus"},
+            "definition": "label_values(localshops_http_requests_total{environment=~\"$environment\"}, method)",
+            "query": {"query": "label_values(localshops_http_requests_total{environment=~\"$environment\"}, method)", "refId": "PrometheusVariableQueryEditor-VariableQuery"},
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "refresh": 1,
+            "sort": 1,
+            "current": {"selected": true, "text": ["All"], "value": ["$__all"]}
+          },
+          {
+            "name": "route",
+            "label": "API route",
+            "type": "query",
+            "datasource": {"type": "prometheus", "uid": "prometheus"},
+            "definition": "label_values(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\"}, route)",
+            "query": {"query": "label_values(localshops_http_requests_total{environment=~\"$environment\",method=~\"$method\"}, route)", "refId": "PrometheusVariableQueryEditor-VariableQuery"},
+            "includeAll": true,
+            "allValue": ".*",
+            "multi": true,
+            "refresh": 1,
+            "sort": 1,
+            "current": {"selected": true, "text": ["All"], "value": ["$__all"]}
+          }
+        ]
+      },
+      "time": {"from": "now-6h", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Localshops HTTP and API overview",
+      "uid": "localshops-http-api",
+      "version": 1
+    }

@@ -98,8 +98,10 @@ healthy:
 
 ```bash
 kubectl apply -f monitoring/application-observability.yaml
+kubectl apply -f monitoring/traefik-observability.yaml
 kubectl apply -f monitoring/alert-rules.yaml
 kubectl apply -f monitoring/dashboard-localshops.yaml
+kubectl apply -f monitoring/dashboard-localshops-http.yaml
 kubectl apply -f monitoring/network-policies.yaml
 ```
 
@@ -109,9 +111,17 @@ must be prepared.
 
 ## Access and alert delivery
 
-Open `https://grafana.bhuplabs.dev` and sign in with Keycloak. The Localshops
-dashboard appears under **Dashboards**, and cluster/app logs are searchable in
+Open `https://grafana.bhuplabs.dev` and sign in with Keycloak. Under
+**Dashboards**, open **Localshops HTTP and API overview** for gateway and API
+request rates, 2xx/3xx/4xx/5xx breakdowns, error percentages, latency, route
+details, and related logs. **Localshops platform overview** remains the compact
+health and operations dashboard. Cluster/app logs are searchable in
 **Explore > Loki** with queries such as:
+
+The dashboard's gateway panels include both production and development traffic.
+The detailed FastAPI panels currently contain development data only; they will
+include production automatically after the metrics-enabled API image is promoted
+and `localshops` is added to the ServiceMonitor namespace selector.
 
 ```logql
 {namespace="localshops-dev", app="api"}
