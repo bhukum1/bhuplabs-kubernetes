@@ -45,6 +45,10 @@ The script updates existing runtime rules without reloading firewalld, preservin
 Kubernetes-managed CNI and kube-proxy chains. Follow the post-reload Traefik restart
 in `cluster/README.md` after first-time setup or any manual reload.
 
+Run `cluster/configure-node-inotify.sh` as root on every node to persist sufficient
+inotify capacity for Kubernetes log followers. When direct worker-node access is not
+available, follow the transient bootstrap DaemonSet procedure in `cluster/README.md`.
+
 ## Prerequisites
 
 - DNS A records for `n8n`, `grafana`, `vault`, and `auth.bhuplabs.dev` pointing to

@@ -34,6 +34,41 @@ These resources cover controls outside the `localshops` namespace.
   Gateway API and Ingress backends. This preserves reliable cross-node routing through
   kube-proxy while Calico continues to enforce workload network policies. Reapply it after
   a Traefik Helm upgrade unless both native-LB settings are stored in Helm values.
+- `configure-node-inotify.sh` raises the per-user inotify-instance ceiling from the
+  Oracle Linux default of 128 to 1024. This prevents kubelet log followers such as
+  Grafana Alloy from failing with `failed to create fsnotify watcher: too many open
+  files`. Run it as root on every node. The transient `node-inotify-tuning.yaml`
+  DaemonSet performs the same persistent configuration when worker-node SSH access is
+  unavailable; delete the DaemonSet immediately after it succeeds.
+
+## Node inotify capacity
+
+The preferred node-bootstrap method is:
+
+```bash
+sudo cluster/configure-node-inotify.sh
+```
+
+Verify both the active and persistent values on every node:
+
+```bash
+sysctl fs.inotify.max_user_instances
+cat /etc/sysctl.d/99-kubernetes-inotify.conf
+```
+
+If direct node administration is temporarily unavailable, use the bootstrap DaemonSet:
+
+```bash
+kubectl apply -f cluster/node-inotify-tuning.yaml
+kubectl rollout status daemonset/node-inotify-tuning -n kube-system --timeout=180s
+kubectl logs -n kube-system daemonset/node-inotify-tuning -c configure
+kubectl delete -f cluster/node-inotify-tuning.yaml
+```
+
+The DaemonSet requires a privileged init container solely to change the host sysctl and
+write its reboot-persistent file. Its regular container is unprivileged, and the complete
+DaemonSet must not remain installed after bootstrap. Raising the limit does not allocate
+1024 watchers up front; kernel memory is consumed only by watchers that are created.
 
 ## Canal host firewall prerequisite
 

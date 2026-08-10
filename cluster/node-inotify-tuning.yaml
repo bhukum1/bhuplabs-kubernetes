@@ -1,0 +1,89 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: node-inotify-tuning
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: node-inotify-tuning
+    app.kubernetes.io/part-of: cluster-bootstrap
+  annotations:
+    bhuplabs.dev/lifecycle: transient
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: node-inotify-tuning
+  updateStrategy:
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: node-inotify-tuning
+        app.kubernetes.io/part-of: cluster-bootstrap
+    spec:
+      automountServiceAccountToken: false
+      hostPID: true
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - operator: Exists
+      initContainers:
+        - name: configure
+          image: quay.io/calico/node:v3.32.1
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              target_file=/host/etc/sysctl.d/99-kubernetes-inotify.conf
+              target_instances=1024
+              current_instances="$(cat /proc/sys/fs/inotify/max_user_instances)"
+              effective_instances="${target_instances}"
+              if [ "${current_instances}" -gt "${target_instances}" ]; then
+                effective_instances="${current_instances}"
+              fi
+              umask 022
+              printf '%s\n' \
+                '# Managed by bhuplabs-kubernetes/cluster/node-inotify-tuning.yaml' \
+                '# Prevent kubelet log followers from exhausting per-user inotify instances.' \
+                "fs.inotify.max_user_instances = ${effective_instances}" \
+                >"${target_file}"
+              printf '%s\n' "${effective_instances}" >/proc/sys/fs/inotify/max_user_instances
+              test "$(cat /proc/sys/fs/inotify/max_user_instances)" = "${effective_instances}"
+              echo "fs.inotify.max_user_instances=${effective_instances}"
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: 5m
+              memory: 8Mi
+            limits:
+              cpu: 50m
+              memory: 32Mi
+          volumeMounts:
+            - name: host-sysctl
+              mountPath: /host/etc/sysctl.d
+      containers:
+        - name: completed
+          image: quay.io/calico/node:v3.32.1
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-c", "while true; do sleep 3600; done"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests:
+              cpu: 1m
+              memory: 4Mi
+            limits:
+              cpu: 10m
+              memory: 16Mi
+      volumes:
+        - name: host-sysctl
+          hostPath:
+            path: /etc/sysctl.d
+            type: Directory
