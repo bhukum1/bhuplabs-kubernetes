@@ -11,6 +11,10 @@ secrets/
 kubeconfig*
 *.tfstate
 *.tfstate.*
+*.tfvars
+!*.tfvars.example
+.terraform/
+terraform.rc
 values.local.yaml
 
 # Local tooling

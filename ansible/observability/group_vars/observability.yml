@@ -1,0 +1,14 @@
+---
+observability_timezone: Asia/Kolkata
+observability_data_root: /srv/localshops-observability
+
+# Keep version upgrades explicit and reviewable. Digests will be added before
+# the first deployment so mutable tags are never used in production.
+observability_images:
+  caddy: docker.io/library/caddy:2.10.2
+  grafana: docker.io/grafana/grafana:12.1.0
+  victoriametrics: docker.io/victoriametrics/victoria-metrics:v1.122.0
+  vmalert: docker.io/victoriametrics/vmalert:v1.122.0
+  loki: docker.io/grafana/loki:3.5.3
+  alertmanager: quay.io/prometheus/alertmanager:v0.28.1
+  blackbox_exporter: quay.io/prometheus/blackbox-exporter:v0.27.0

@@ -1,4 +1,8 @@
-# Bhuplabs Kubernetes platform
+# Bhuplabs platform infrastructure
+
+> The repository currently contains both the running legacy kubeadm platform
+> and the in-progress zero-cost OKE replacement. Legacy manifests remain
+> unchanged until the new platform passes its migration gates.
 
 Git-safe source for the deployed Bhuplabs platform:
 
@@ -24,6 +28,9 @@ Secret exports are included.
 ## Repository layout
 
 ```text
+terraform/     Target OCI/OKE infrastructure managed through Resource Manager
+ansible/       Target secondary-VM configuration and observability services
+docs/migration Target architecture, data scope, cutover and recovery decisions
 cluster/       Cluster hardening, CNI, backups, node storage, and operational tuning
 cert-manager/  ACME issuer and chart values
 monitoring/    Metrics, logs, traces, probes, dashboards, alerts, and Retain storage
@@ -34,6 +41,11 @@ traefik/       production values, health backend, Gateways, and routes
 vault/         Raft storage, chart values, policies, routes, and scripts
 docs/          architecture and operational notes
 ```
+
+The authoritative scope for the clean rebuild is
+`docs/migration/DATA-SCOPE.md`. Current shops, orders, products, Keycloak, n8n,
+Redis, Vault and historical monitoring data are disposable test state and are
+not migration inputs.
 
 Cluster-wide controls and repeatable post-upgrade tuning live in `cluster/`. Read
 `cluster/README.md` before changing the control plane, CNI, backup jobs, or shared
