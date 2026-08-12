@@ -28,6 +28,10 @@ Local Terraform is for formatting and preflight validation. A local plan
 requires an authenticated OCI CLI/provider profile and a private
 `terraform.tfvars` copied from the example.
 
+Set `kubernetes_version` to the exact OKE patch version offered in the target
+region at plan time. The value must be reviewed again before each control-plane
+upgrade; Terraform must not select a version implicitly.
+
 ```bash
 terraform -chdir=terraform/oke init
 terraform -chdir=terraform/oke fmt -check

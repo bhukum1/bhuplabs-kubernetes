@@ -3,7 +3,7 @@ tenancy_ocid      = "ocid1.tenancy.oc1..replace-me"
 compartment_ocid  = "ocid1.compartment.oc1..replace-me"
 region            = "us-ashburn-1"
 home_region       = "us-ashburn-1"
-kubernetes_version = "v1.34.2"
+kubernetes_version = "v1.36.1"
 ssh_public_key    = "ssh-ed25519 AAAA... localshops-operator"
 
 # Change this if it overlaps an existing or future peered network.
