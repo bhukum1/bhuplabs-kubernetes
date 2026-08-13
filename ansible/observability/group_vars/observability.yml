@@ -1,6 +1,12 @@
 ---
 observability_timezone: Asia/Kolkata
 observability_data_root: /srv/localshops-observability
+observability_volume:
+  size_gib: 100
+  filesystem: xfs
+  filesystem_uuid: 1fe1d8e3-4f6c-4e89-bf54-d810a722e0c9
+  device_id: scsi-360453b11ea77449da2fb95849addefab
+  mount_options: defaults,noatime,_netdev,nofail,x-systemd.device-timeout=30s
 
 # Keep version upgrades explicit and reviewable. Digests will be added before
 # the first deployment so mutable tags are never used in production.

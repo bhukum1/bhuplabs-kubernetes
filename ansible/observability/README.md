@@ -1,12 +1,22 @@
 # Observability VM automation
 
 This directory will configure the secondary-tenancy Oracle Linux VM with
-Ansible and rootless Podman/systemd units. It is intentionally not runnable yet:
-the VM identity, public IP, attached data-volume mount, firewall source CIDRs,
-DNS names, alert receiver and pinned image digests must be confirmed first.
+Ansible and rootless Podman/systemd units.
 
-No secrets belong in inventory or group variables. Runtime credentials will be
-SOPS-encrypted in Git and decrypted only on the operator machine/target host.
+The following production inputs were verified on 2026-08-13:
+
+- host: `node02` (`129.213.71.249`), Oracle Linux 9 on A1 Flex (2 OCPU/12 GB);
+- data volume: 100 GiB OCI Always Free Block Volume, Balanced performance;
+- attachment: paravirtualized read/write with in-transit encryption;
+- filesystem: XFS mounted at `/srv/localshops-observability` by UUID;
+- mount safety: `nofail`, `_netdev`, `noatime` and a 30-second device timeout.
+
+The stack remains intentionally gated until the Grafana and ingestion DNS
+records, alert receiver, firewall source CIDRs and pinned image digests are
+confirmed. No secrets belong in inventory or group variables.
+
+Runtime credentials will be SOPS-encrypted in Git and decrypted only on the
+operator machine/target host.
 
 The first runnable playbook will be delivered with these idempotent stages:
 
