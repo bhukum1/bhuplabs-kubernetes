@@ -55,22 +55,3 @@ resource "oci_bastion_bastion" "oke" {
   name                         = "${var.cluster_name}-admin"
   freeform_tags                = local.common_tags
 }
-
-# Managed Bastion private endpoints cannot be attached to an NSG. Limit the
-# control-plane ingress to the dedicated /29 subnet instead.
-resource "oci_core_network_security_group_security_rule" "bastion_to_apiserver" {
-  network_security_group_id = module.oke.control_plane_nsg_id
-  direction                 = "INGRESS"
-  protocol                  = "6"
-  source                    = var.bastion_subnet_cidr
-  source_type               = "CIDR_BLOCK"
-  stateless                 = false
-  description               = "Allow managed OCI Bastion to the private OKE API"
-
-  tcp_options {
-    destination_port_range {
-      min = 6443
-      max = 6443
-    }
-  }
-}
