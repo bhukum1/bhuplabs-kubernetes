@@ -10,6 +10,3 @@ cluster_name                = "localshops-production"
 environment                 = "production"
 vcn_ocid                    = "ocid1.vcn.oc1.region.replace-me"
 existing_public_subnet_ocid = "ocid1.subnet.oc1.region.replace-me"
-
-# Temporary during cross-tenancy migration only. Remove after DRG peering.
-migration_gateway_private_ip_ocid = "ocid1.privateip.oc1.region.replace-me"

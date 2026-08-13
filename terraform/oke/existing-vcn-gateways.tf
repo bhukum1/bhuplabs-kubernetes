@@ -45,17 +45,4 @@ resource "oci_core_route_table" "oke_private" {
     network_entity_id = oci_core_service_gateway.oke.id
   }
 
-  # Temporary, private-only path to node02 while the cross-tenancy DRG remote
-  # peering connection is completed. Pointing at the existing master's private
-  # IP avoids exposing PostgreSQL on the internet. Remove this value after the
-  # DRG route becomes active.
-  dynamic "route_rules" {
-    for_each = var.migration_gateway_private_ip_ocid == "" ? [] : [1]
-
-    content {
-      destination       = var.standalone_service_cidr
-      destination_type  = "CIDR_BLOCK"
-      network_entity_id = var.migration_gateway_private_ip_ocid
-    }
-  }
 }
