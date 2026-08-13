@@ -9,6 +9,8 @@ cost boundary:
   boot volume.
 - Reuse of the existing Always Free load-balancer subnet and public IP, with
   private worker/pod/control-plane subnets plus NAT and OCI service gateways.
+- An optional, narrowly scoped route to the existing WireGuard gateway for
+  node02 services while cross-tenancy DRG peering is completed.
 - No bastion VM, operator VM, paid worker fallback, WAF, or enhanced cluster.
 
 The node shape and count are intentionally not configurable. If Ampere Always

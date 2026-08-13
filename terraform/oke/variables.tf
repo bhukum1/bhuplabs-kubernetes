@@ -85,6 +85,18 @@ variable "management_cidrs" {
   default     = ["10.0.0.0/24", "10.200.0.0/24"]
 }
 
+variable "standalone_service_cidr" {
+  description = "Node02 service address routed privately during migration."
+  type        = string
+  default     = "10.200.0.2/32"
+}
+
+variable "migration_gateway_private_ip_ocid" {
+  description = "Optional private-IP OCID of the temporary WireGuard gateway. Leave empty after DRG peering is active."
+  type        = string
+  default     = ""
+}
+
 variable "freeform_tags" {
   description = "Additional tags merged onto LocalShops resources."
   type        = map(string)
