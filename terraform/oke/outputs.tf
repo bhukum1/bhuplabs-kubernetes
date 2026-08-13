@@ -23,3 +23,13 @@ output "kubeconfig" {
   value       = module.oke.cluster_kubeconfig
   sensitive   = true
 }
+
+output "bastion_id" {
+  description = "OCI-managed Bastion OCID used for temporary OKE API sessions."
+  value       = oci_bastion_bastion.oke.id
+}
+
+output "bastion_private_endpoint" {
+  description = "Private VCN address allocated to the managed Bastion endpoint."
+  value       = oci_bastion_bastion.oke.private_endpoint_ip_address
+}

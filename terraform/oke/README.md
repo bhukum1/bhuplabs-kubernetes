@@ -11,7 +11,8 @@ cost boundary:
   private worker/pod/control-plane subnets plus NAT and OCI service gateways.
 - Egress through a stable NAT gateway; node02 PostgreSQL permits TLS traffic
   only from that NAT gateway's public `/32` address.
-- No bastion VM, operator VM, paid worker fallback, WAF, or enhanced cluster.
+- A free OCI-managed Bastion in a dedicated private `/29`; no bastion VM,
+  operator VM, paid worker fallback, WAF, or enhanced cluster.
 
 The node shape and count are intentionally not configurable. If Ampere Always
 Free capacity is unavailable, the apply must fail rather than create a paid
@@ -47,9 +48,9 @@ Resource Manager variables containing credentials.
 ## Private API operations
 
 Day-to-day deployment will use Flux from inside OKE. Administrative `kubectl`
-access must enter through OCI Cloud Shell private networking or an explicitly
-approved short-lived access path. Do not make the OKE API public merely to make
-GitHub Actions deployment convenient.
+access enters through short-lived OCI Bastion port-forwarding sessions from
+node02's fixed public `/32`. Do not make the OKE API public merely to make
+administration or GitHub Actions deployment convenient.
 
 ## Post-provision gates
 

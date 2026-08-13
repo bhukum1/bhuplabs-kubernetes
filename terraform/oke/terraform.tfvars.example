@@ -10,3 +10,6 @@ cluster_name                = "localshops-production"
 environment                 = "production"
 vcn_ocid                    = "ocid1.vcn.oc1.region.replace-me"
 existing_public_subnet_ocid = "ocid1.subnet.oc1.region.replace-me"
+management_cidrs             = ["10.0.31.0/29"]
+bastion_subnet_cidr          = "10.0.31.0/29"
+bastion_client_cidrs         = ["203.0.113.10/32"]

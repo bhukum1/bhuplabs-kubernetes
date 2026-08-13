@@ -58,8 +58,8 @@ module "oke" {
     pods     = { create = "always", cidr = var.pod_subnet_cidr }
   }
 
-  # The old master is the bootstrap host and node02 is the long-lived
-  # management host connected through the existing DRG.
+  # Interactive API access enters through the dedicated managed Bastion
+  # subnet. Worker and pod access is handled by their NSG-to-NSG rules.
   control_plane_allowed_cidrs = var.management_cidrs
 
   # The existing load balancer is not attached to the module-created public

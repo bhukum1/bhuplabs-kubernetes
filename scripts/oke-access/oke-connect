@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly config_file="/etc/localshops/oke-access.env"
+readonly state_dir="${HOME}/.local/state/localshops-oke"
+readonly pid_file="${state_dir}/tunnel.pid"
+readonly session_file="${state_dir}/session.id"
+readonly log_file="${state_dir}/tunnel.log"
+readonly key_file="${HOME}/.ssh/localshops-oke-bastion"
+readonly kubeconfig_file="${HOME}/.kube/config"
+
+if [[ ! -r "${config_file}" ]]; then
+  echo "Missing ${config_file}; ask the platform administrator to install OKE access." >&2
+  exit 1
+fi
+
+# Contains only public OCI identifiers, IPs and ports; no credentials.
+# shellcheck disable=SC1090
+source "${config_file}"
+
+mkdir -p "${state_dir}" "${HOME}/.ssh" "${HOME}/.kube"
+chmod 700 "${state_dir}" "${HOME}/.ssh" "${HOME}/.kube"
+
+if [[ -s "${pid_file}" ]] && kill -0 "$(<"${pid_file}")" 2>/dev/null; then
+  echo "OKE tunnel is already running (PID $(<"${pid_file}"))."
+  kubectl --kubeconfig "${kubeconfig_file}" get nodes
+  exit 0
+fi
+
+if [[ ! -f "${key_file}" ]]; then
+  ssh-keygen -q -t ed25519 -N "" -C "localshops-oke-bastion" -f "${key_file}"
+fi
+
+oci ce cluster create-kubeconfig \
+  --cluster-id "${OKE_CLUSTER_ID}" \
+  --file "${kubeconfig_file}" \
+  --region "${OCI_REGION}" \
+  --token-version 2.0.0 \
+  --kube-endpoint PRIVATE_ENDPOINT \
+  --overwrite >/dev/null
+
+cluster_entry="$(kubectl --kubeconfig "${kubeconfig_file}" config view -o jsonpath='{.clusters[0].name}')"
+kubectl --kubeconfig "${kubeconfig_file}" config set-cluster "${cluster_entry}" \
+  --server="https://127.0.0.1:${OKE_LOCAL_PORT}" \
+  --tls-server-name="${OKE_PRIVATE_IP}" >/dev/null
+
+session_id="$(oci bastion session create-port-forwarding \
+  --bastion-id "${OKE_BASTION_ID}" \
+  --target-private-ip "${OKE_PRIVATE_IP}" \
+  --target-port "${OKE_PRIVATE_PORT}" \
+  --session-ttl 10800 \
+  --display-name "node02-kubectl-$(date -u +%Y%m%dT%H%M%SZ)" \
+  --ssh-public-key-file "${key_file}.pub" \
+  --query 'data.id' \
+  --raw-output)"
+printf '%s\n' "${session_id}" >"${session_file}"
+chmod 600 "${session_file}"
+
+for _ in {1..60}; do
+  session_state="$(oci bastion session get --session-id "${session_id}" --query 'data."lifecycle-state"' --raw-output)"
+  case "${session_state}" in
+    ACTIVE) break ;;
+    FAILED|DELETED)
+      echo "Bastion session entered ${session_state}." >&2
+      exit 1
+      ;;
+  esac
+  sleep 2
+done
+
+if [[ "${session_state:-}" != "ACTIVE" ]]; then
+  echo "Timed out waiting for the Bastion session to become ACTIVE." >&2
+  exit 1
+fi
+
+ssh \
+  -i "${key_file}" \
+  -o IdentitiesOnly=yes \
+  -o ExitOnForwardFailure=yes \
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  -o StrictHostKeyChecking=accept-new \
+  -o UserKnownHostsFile="${state_dir}/known_hosts" \
+  -N -L "127.0.0.1:${OKE_LOCAL_PORT}:${OKE_PRIVATE_IP}:${OKE_PRIVATE_PORT}" \
+  "${session_id}@host.bastion.${OCI_REGION}.oci.oraclecloud.com" \
+  >"${log_file}" 2>&1 &
+tunnel_pid=$!
+printf '%s\n' "${tunnel_pid}" >"${pid_file}"
+chmod 600 "${pid_file}" "${log_file}"
+
+for _ in {1..30}; do
+  if nc -z 127.0.0.1 "${OKE_LOCAL_PORT}" 2>/dev/null; then
+    echo "OKE tunnel is active for up to 3 hours."
+    kubectl --kubeconfig "${kubeconfig_file}" get nodes
+    exit 0
+  fi
+  if ! kill -0 "${tunnel_pid}" 2>/dev/null; then
+    echo "SSH tunnel exited unexpectedly:" >&2
+    tail -n 20 "${log_file}" >&2
+    exit 1
+  fi
+  sleep 1
+done
+
+echo "Timed out waiting for the local tunnel." >&2
+exit 1

@@ -80,9 +80,32 @@ variable "pod_subnet_cidr" {
 }
 
 variable "management_cidrs" {
-  description = "Existing bootstrap and DRG management networks allowed to access the private Kubernetes API."
+  description = "Dedicated management networks allowed to access the private Kubernetes API. Keep this aligned with bastion_subnet_cidr."
   type        = list(string)
-  default     = ["10.0.0.0/24", "10.200.0.0/24"]
+  default     = ["10.0.31.0/29"]
+}
+
+variable "bastion_subnet_cidr" {
+  description = "Dedicated private subnet used only by the OCI-managed Bastion endpoint."
+  type        = string
+  default     = "10.0.31.0/29"
+
+  validation {
+    condition     = can(cidrhost(var.bastion_subnet_cidr, 0))
+    error_message = "bastion_subnet_cidr must be a valid IPv4 CIDR."
+  }
+}
+
+variable "bastion_client_cidrs" {
+  description = "Public source CIDRs permitted to create SSH connections to Bastion. Production uses node02's fixed /32 only."
+  type        = list(string)
+
+  validation {
+    condition = alltrue([
+      for cidr in var.bastion_client_cidrs : can(cidrhost(cidr, 0)) && cidr != "0.0.0.0/0"
+    ])
+    error_message = "Every Bastion client must be a valid, restricted CIDR; 0.0.0.0/0 is forbidden."
+  }
 }
 
 variable "freeform_tags" {

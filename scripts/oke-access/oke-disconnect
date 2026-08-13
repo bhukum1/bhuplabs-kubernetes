@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly state_dir="${HOME}/.local/state/localshops-oke"
+readonly pid_file="${state_dir}/tunnel.pid"
+readonly session_file="${state_dir}/session.id"
+
+if [[ -s "${pid_file}" ]]; then
+  tunnel_pid="$(<"${pid_file}")"
+  if kill -0 "${tunnel_pid}" 2>/dev/null; then
+    kill "${tunnel_pid}"
+  fi
+  rm -f "${pid_file}"
+fi
+
+if [[ -s "${session_file}" ]]; then
+  session_id="$(<"${session_file}")"
+  oci bastion session delete --session-id "${session_id}" --force >/dev/null 2>&1 || true
+  rm -f "${session_file}"
+fi
+
+echo "OKE tunnel is disconnected."
