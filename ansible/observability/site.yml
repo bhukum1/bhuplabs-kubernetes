@@ -12,6 +12,7 @@
       - localshops-alertmanager
       - localshops-blackbox
       - localshops-node-exporter
+      - localshops-postgres-exporter
       - localshops-vmagent
       - localshops-vmalert
       - localshops-grafana
@@ -33,6 +34,7 @@
           - firewalld
           - chrony
           - xfsprogs
+          - sqlite
         state: present
 
     - name: Keep time synchronization and firewall active
@@ -92,6 +94,30 @@
         mode: "0644"
       notify: Restart observability services
 
+    - name: Install host backup script
+      ansible.builtin.copy:
+        src: files/usr/local/sbin/localshops-observability-backup
+        dest: /usr/local/sbin/localshops-observability-backup
+        owner: root
+        group: root
+        mode: "0750"
+
+    - name: Create node-exporter textfile directory
+      ansible.builtin.file:
+        path: /var/lib/node_exporter/textfile_collector
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Install backup systemd units
+      ansible.builtin.copy:
+        src: files/etc/systemd/system/
+        dest: /etc/systemd/system/
+        owner: root
+        group: root
+        mode: "0644"
+
     - name: Check required runtime-only credential files
       ansible.builtin.stat:
         path: "/etc/localshops-observability/{{ item }}"
@@ -99,6 +125,7 @@
       loop:
         - grafana.env
         - caddy.env
+        - postgres-exporter.env
       no_log: true
 
     - name: Refuse to start without runtime credentials
@@ -112,6 +139,20 @@
           bootstrap in README.md; never put it in Git or Ansible inventory.
       loop: "{{ observability_secret_files.results }}"
       no_log: true
+
+    - name: Permit the localhost-only PostgreSQL monitoring role
+      ansible.builtin.lineinfile:
+        path: /var/lib/pgsql/data/pg_hba.conf
+        line: host    postgres        localshops_monitor 127.0.0.1/32            scram-sha-256
+        insertbefore: '^host\s+all\s+all\s+127\.0\.0\.1/32'
+        backup: true
+      register: observability_pg_hba
+
+    - name: Reload PostgreSQL authentication after an exact rule change
+      ansible.builtin.systemd_service:
+        name: postgresql
+        state: reloaded
+      when: observability_pg_hba is changed
 
     - name: Check public gateway services in firewalld
       ansible.builtin.command:
@@ -149,6 +190,12 @@
       ansible.builtin.systemd_service:
         daemon_reload: true
 
+    - name: Enable the validated daily recovery backup
+      ansible.builtin.systemd_service:
+        name: localshops-observability-backup.timer
+        state: started
+        enabled: true
+
     - name: Start and boot-enable the observability stack
       ansible.builtin.systemd_service:
         name: "{{ item }}"
@@ -173,6 +220,20 @@
         - http://127.0.0.1:3100/ready
         - http://127.0.0.1:9093/-/ready
         - http://127.0.0.1:9115/-/healthy
+        - http://127.0.0.1:9187/metrics
+
+    - name: Confirm the PostgreSQL exporter can authenticate and query
+      ansible.builtin.uri:
+        url: http://127.0.0.1:9187/metrics
+        status_code: 200
+        return_content: true
+      register: observability_postgres_metrics
+
+    - name: Refuse a database exporter that cannot reach PostgreSQL
+      ansible.builtin.assert:
+        that:
+          - "'pg_up 1' in observability_postgres_metrics.content"
+        fail_msg: PostgreSQL exporter is running but cannot query the database.
 
   handlers:
     - name: Restart observability services

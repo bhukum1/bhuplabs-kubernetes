@@ -17,6 +17,14 @@ groups:
         annotations:
           summary: Public endpoint is slow
           description: "{{ $labels.instance }} has taken more than three seconds for ten minutes."
+      - alert: PublicCertificateExpiringSoon
+        expr: (probe_ssl_earliest_cert_expiry{job="public-endpoints"} - time()) < 14 * 24 * 60 * 60
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: Public TLS certificate expires in under 14 days
+          description: "{{ $labels.instance }} needs certificate renewal attention."
 
   - name: scrape-health
     rules:
@@ -63,6 +71,53 @@ groups:
         annotations:
           summary: Filesystem has less than 15% free space
           description: "{{ $labels.instance }} mount {{ $labels.mountpoint }} is nearly full."
+      - alert: HostClockNotSynchronized
+        expr: node_timex_sync_status == 0
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Host clock is not synchronized
+          description: "{{ $labels.instance }} has reported an unsynchronized system clock for ten minutes."
+      - alert: ObservabilityBackupStale
+        expr: time() - localshops_observability_backup_last_success_unixtime > 36 * 60 * 60 or absent(localshops_observability_backup_last_success_unixtime)
+        for: 15m
+        labels:
+          severity: critical
+          service: observability-backup
+        annotations:
+          summary: Observability recovery backup is stale
+          description: No successful, integrity-checked observability control-data backup has been recorded in 36 hours.
+
+  - name: postgresql
+    rules:
+      - alert: PostgreSQLExporterDown
+        expr: pg_up == 0 or absent(pg_up)
+        for: 5m
+        labels:
+          severity: critical
+          service: postgresql
+        annotations:
+          summary: PostgreSQL monitoring or database is unavailable
+          description: PostgreSQL has not produced a successful exporter scrape for five minutes.
+      - alert: PostgreSQLTooManyConnections
+        expr: sum(pg_stat_activity_count{datname!=""}) / max(pg_settings_max_connections) > 0.80
+        for: 10m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: PostgreSQL connection usage exceeds 80%
+          description: PostgreSQL connection capacity has remained high for ten minutes.
+      - alert: PostgreSQLDeadlocks
+        expr: increase(pg_stat_database_deadlocks[15m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: PostgreSQL deadlock detected
+          description: "Database {{ $labels.datname }} recorded a deadlock during the last 15 minutes."
 
   - name: kubernetes-workloads
     rules:
@@ -90,6 +145,41 @@ groups:
         annotations:
           summary: Pod is crash-looping
           description: "{{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} is in CrashLoopBackOff."
+      - alert: PodOOMKilled
+        expr: increase(kube_pod_container_status_restarts_total{namespace=~"localshops(-dev)?"}[10m]) > 0 and on(namespace,pod,container) kube_pod_container_status_last_terminated_reason{reason="OOMKilled"} == 1
+        for: 0m
+        labels:
+          severity: critical
+        annotations:
+          summary: Pod container was killed for exceeding memory
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} was OOMKilled."
+      - alert: PodPendingTooLong
+        expr: kube_pod_status_phase{namespace=~"localshops(-dev)?",phase="Pending"} == 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Pod has remained Pending
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} has been Pending for ten minutes."
+
+  - name: redis
+    rules:
+      - alert: RedisExporterDown
+        expr: redis_up{namespace=~"localshops(-dev)?"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Redis is unavailable
+          description: "The Redis instance in {{ $labels.namespace }} has been unavailable for five minutes."
+      - alert: RedisMemoryHigh
+        expr: redis_memory_used_bytes{namespace=~"localshops(-dev)?"} / clamp_min(redis_memory_max_bytes{namespace=~"localshops(-dev)?"}, 1) > 0.85 and redis_memory_max_bytes{namespace=~"localshops(-dev)?"} > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Redis memory usage exceeds 85%
+          description: "The Redis instance in {{ $labels.namespace }} is approaching its configured memory limit."
 
   - name: localshops-api
     rules:

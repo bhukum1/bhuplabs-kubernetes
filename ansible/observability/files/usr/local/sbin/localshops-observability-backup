@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly backup_root=/var/backups/localshops-observability
+readonly source_root=/srv/localshops-observability
+readonly timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
+readonly work_dir="${backup_root}/.${timestamp}.tmp"
+readonly final_dir="${backup_root}/${timestamp}"
+readonly metric_dir=/var/lib/node_exporter/textfile_collector
+readonly metric_tmp="${metric_dir}/observability_backup.prom.tmp"
+readonly metric_file="${metric_dir}/observability_backup.prom"
+
+install -d -o root -g root -m 0700 "${backup_root}" "${work_dir}"
+install -d -o root -g root -m 0755 "${metric_dir}"
+cleanup() {
+  if [[ -d "${work_dir}" ]]; then
+    find "${work_dir}" -mindepth 1 -delete
+    rmdir "${work_dir}"
+  fi
+}
+trap cleanup EXIT
+
+if [[ -s "${source_root}/grafana/grafana.db" ]]; then
+  sqlite3 "${source_root}/grafana/grafana.db" ".timeout 10000" ".backup '${work_dir}/grafana.db'"
+  [[ "$(sqlite3 "${work_dir}/grafana.db" 'PRAGMA integrity_check;')" == "ok" ]]
+  gzip -9 "${work_dir}/grafana.db"
+fi
+
+if [[ -d "${source_root}/alertmanager" ]]; then
+  tar --ignore-failed-read -C "${source_root}" -czf "${work_dir}/alertmanager.tar.gz" alertmanager
+fi
+
+(
+  cd "${work_dir}"
+  sha256sum ./* >SHA256SUMS
+)
+mv -- "${work_dir}" "${final_dir}"
+trap - EXIT
+
+while IFS= read -r expired_backup; do
+  find "${expired_backup}" -mindepth 1 -delete
+  rmdir "${expired_backup}"
+done < <(find "${backup_root}" -mindepth 1 -maxdepth 1 -type d -name '20??????T??????Z' -mtime +7 -print)
+
+# The backups must remain small enough for the separate boot volume. A growing
+# Grafana database or Alertmanager state should be investigated, not hidden.
+backup_size_bytes="$(du -sb "${backup_root}" | awk '{print $1}')"
+if (( backup_size_bytes > 1073741824 )); then
+  echo "Observability recovery backups exceed 1 GiB" >&2
+  exit 1
+fi
+
+cat >"${metric_tmp}" <<EOF
+# HELP localshops_observability_backup_last_success_unixtime Last successful recovery backup time.
+# TYPE localshops_observability_backup_last_success_unixtime gauge
+localshops_observability_backup_last_success_unixtime $(date +%s)
+# HELP localshops_observability_backup_size_bytes Total size of retained recovery backups.
+# TYPE localshops_observability_backup_size_bytes gauge
+localshops_observability_backup_size_bytes ${backup_size_bytes}
+EOF
+chmod 0644 "${metric_tmp}"
+mv -- "${metric_tmp}" "${metric_file}"

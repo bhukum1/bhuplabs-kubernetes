@@ -1,0 +1,22 @@
+[Unit]
+Description=Localshops PostgreSQL exporter
+After=network-online.target postgresql.service
+Requires=postgresql.service
+Wants=network-online.target
+
+[Container]
+Image=quay.io/prometheuscommunity/postgres-exporter@sha256:5e671299e1fb608fab7505841bc5fcdb91a4fa251a2446db9c14cc6b483dfd53
+ContainerName=localshops-postgres-exporter
+Network=host
+EnvironmentFile=/etc/localshops-observability/postgres-exporter.env
+Volume=/etc/localshops-observability/postgres-exporter/config.yml:/etc/postgres-exporter/config.yml:ro,Z
+Exec=--config.file=/etc/postgres-exporter/config.yml --web.listen-address=127.0.0.1:9187 --log.level=warn
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=900
+MemoryMax=192M
+
+[Install]
+WantedBy=multi-user.target

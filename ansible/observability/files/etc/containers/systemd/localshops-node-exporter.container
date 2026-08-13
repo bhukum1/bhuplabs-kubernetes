@@ -9,7 +9,7 @@ ContainerName=localshops-node-exporter
 Network=host
 ReadOnly=true
 Volume=/:/host:ro,rslave
-Exec=--path.rootfs=/host --web.listen-address=127.0.0.1:9100 --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/containers/.+|var/lib/kubelet/.+)($|/)
+Exec=--path.rootfs=/host --web.listen-address=127.0.0.1:9100 --collector.textfile.directory=/host/var/lib/node_exporter/textfile_collector --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/containers/.+|var/lib/kubelet/.+)($|/)
 
 [Service]
 Restart=always

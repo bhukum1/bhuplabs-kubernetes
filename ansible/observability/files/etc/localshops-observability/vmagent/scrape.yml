@@ -12,6 +12,13 @@ scrape_configs:
           environment: infrastructure
           service: node02
 
+  - job_name: node02-postgresql
+    static_configs:
+      - targets: ["127.0.0.1:9187"]
+        labels:
+          environment: infrastructure
+          service: postgresql
+
   - job_name: observability-services
     static_configs:
       - targets:

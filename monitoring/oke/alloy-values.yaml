@@ -237,6 +237,54 @@ alloy:
         forward_to      = [prometheus.relabel.cluster.receiver]
       }
 
+      discovery.kubernetes "redis_exporters" {
+        role = "endpoints"
+        namespaces {
+          names = ["localshops", "localshops-dev"]
+        }
+      }
+
+      discovery.relabel "redis_exporters" {
+        targets = discovery.kubernetes.redis_exporters.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_service_name"]
+          regex         = "redis-exporter"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_endpoint_port_name"]
+          regex         = "metrics"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          regex         = "localshops"
+          target_label  = "environment"
+          replacement   = "production"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          regex         = "localshops-dev"
+          target_label  = "environment"
+          replacement   = "development"
+        }
+        rule {
+          target_label = "job"
+          replacement  = "redis-exporter"
+        }
+      }
+
+      prometheus.scrape "redis_exporters" {
+        targets         = discovery.relabel.redis_exporters.output
+        scrape_interval = "30s"
+        forward_to      = [prometheus.relabel.cluster.receiver]
+      }
+
       discovery.kubernetes "pod_logs" {
         role = "pod"
       }

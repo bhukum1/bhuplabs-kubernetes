@@ -1,0 +1,16 @@
+[Unit]
+Description=Back up and validate Localshops observability control data
+After=localshops-grafana.service localshops-alertmanager.service
+RequiresMountsFor=/srv/localshops-observability
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/localshops-observability-backup
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/var/backups /var/lib/node_exporter/textfile_collector
+ReadOnlyPaths=/srv/localshops-observability
+NoNewPrivileges=true

@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily Localshops observability control-data backup
+
+[Timer]
+OnCalendar=*-*-* 02:25:00
+RandomizedDelaySec=20m
+Persistent=true
+Unit=localshops-observability-backup.service
+
+[Install]
+WantedBy=timers.target
