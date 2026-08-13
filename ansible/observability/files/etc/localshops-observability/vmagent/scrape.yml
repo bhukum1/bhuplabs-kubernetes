@@ -36,6 +36,12 @@ scrape_configs:
       module: [http_2xx]
     static_configs:
       - targets:
+          - https://dukly.in/
+          - https://www.dukly.in/
+          - https://shops.dukly.in/
+          - https://app.dukly.in/
+          - https://admin.dukly.in/admin
+          - https://api.dukly.in/health/ready
           - https://app.bhuplabs.dev/
           - https://api.bhuplabs.dev/health/ready
           - https://shops.bhuplabs.dev/
