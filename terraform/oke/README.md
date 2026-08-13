@@ -56,8 +56,7 @@ GitHub Actions deployment convenient.
 Do not direct production DNS at the new load balancer until all gates pass:
 
 1. Both nodes are Ready and use the declared A1 shape.
-2. Calico policy enforcement, Flux, ingress, cert-manager and external-dns are
-   healthy.
+2. Calico policy enforcement, Flux, ingress and cert-manager are healthy.
 3. PostgreSQL restore/clean bootstrap and off-host backup restore are proven.
 4. Application smoke tests and public blackbox probes pass.
 5. The OCI cost report shows no unexpected chargeable resource.

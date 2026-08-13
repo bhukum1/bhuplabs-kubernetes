@@ -1,0 +1,99 @@
+deployment:
+  enabled: true
+  kind: DaemonSet
+  terminationGracePeriodSeconds: 60
+
+updateStrategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0
+
+ingressClass:
+  enabled: true
+  isDefaultClass: false
+  name: traefik
+
+providers:
+  kubernetesCRD:
+    enabled: false
+  kubernetesIngress:
+    enabled: true
+    ingressClass: traefik
+    publishedService:
+      enabled: false
+    ingressEndpoint:
+      ip: 140.245.252.229
+  kubernetesGateway:
+    enabled: false
+
+gateway:
+  enabled: false
+
+gatewayClass:
+  enabled: false
+
+api:
+  dashboard: false
+
+logs:
+  general:
+    level: INFO
+  access:
+    enabled: true
+    format: json
+
+additionalArguments:
+  - --entrypoints.web.http.redirections.entrypoint.to=websecure
+  - --entrypoints.web.http.redirections.entrypoint.scheme=https
+  - --entrypoints.web.http.redirections.entrypoint.permanent=true
+
+ports:
+  metrics:
+    port: 9101
+  web:
+    port: 8000
+    containerPort: 8000
+    exposedPort: 80
+    nodePort: 30080
+  websecure:
+    port: 8443
+    containerPort: 8443
+    exposedPort: 443
+    nodePort: 30443
+    http:
+      maxHeaderBytes: 1048576
+
+service:
+  enabled: true
+  spec:
+    type: NodePort
+    externalTrafficPolicy: Local
+
+hostNetwork: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+securityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+
+podSecurityContext:
+  runAsGroup: 65532
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
