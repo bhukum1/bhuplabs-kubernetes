@@ -73,34 +73,54 @@ if [[ "${session_state:-}" != "ACTIVE" ]]; then
   exit 1
 fi
 
-ssh \
-  -i "${key_file}" \
-  -o IdentitiesOnly=yes \
-  -o ExitOnForwardFailure=yes \
-  -o ServerAliveInterval=30 \
-  -o ServerAliveCountMax=3 \
-  -o StrictHostKeyChecking=accept-new \
-  -o UserKnownHostsFile="${state_dir}/known_hosts" \
-  -N -L "127.0.0.1:${OKE_LOCAL_PORT}:${OKE_PRIVATE_IP}:${OKE_PRIVATE_PORT}" \
-  "${session_id}@host.bastion.${OCI_REGION}.oci.oraclecloud.com" \
-  >"${log_file}" 2>&1 &
-tunnel_pid=$!
-printf '%s\n' "${tunnel_pid}" >"${pid_file}"
-chmod 600 "${pid_file}" "${log_file}"
+# A Bastion session can report ACTIVE a few seconds before its SSH key is
+# available on every service host. Retry the SSH handshake to absorb that
+# short control-plane propagation window.
+for ssh_attempt in {1..6}; do
+  : >"${log_file}"
+  ssh \
+    -i "${key_file}" \
+    -o IdentitiesOnly=yes \
+    -o ConnectTimeout=10 \
+    -o ConnectionAttempts=1 \
+    -o ExitOnForwardFailure=yes \
+    -o ServerAliveInterval=30 \
+    -o ServerAliveCountMax=3 \
+    -o StrictHostKeyChecking=accept-new \
+    -o UserKnownHostsFile="${state_dir}/known_hosts" \
+    -N -L "127.0.0.1:${OKE_LOCAL_PORT}:${OKE_PRIVATE_IP}:${OKE_PRIVATE_PORT}" \
+    "${session_id}@host.bastion.${OCI_REGION}.oci.oraclecloud.com" \
+    >"${log_file}" 2>&1 &
+  tunnel_pid=$!
+  printf '%s\n' "${tunnel_pid}" >"${pid_file}"
+  chmod 600 "${pid_file}" "${log_file}"
 
-for _ in {1..30}; do
-  if nc -z 127.0.0.1 "${OKE_LOCAL_PORT}" 2>/dev/null; then
-    echo "OKE tunnel is active for up to 3 hours."
-    kubectl --kubeconfig "${kubeconfig_file}" get nodes
-    exit 0
+  for _ in {1..20}; do
+    if (exec 3<>"/dev/tcp/127.0.0.1/${OKE_LOCAL_PORT}") 2>/dev/null; then
+      echo "OKE tunnel is active for up to 3 hours."
+      kubectl --kubeconfig "${kubeconfig_file}" get nodes
+      exit 0
+    fi
+    if ! kill -0 "${tunnel_pid}" 2>/dev/null; then
+      break
+    fi
+    sleep 1
+  done
+
+  if kill -0 "${tunnel_pid}" 2>/dev/null; then
+    kill "${tunnel_pid}"
+    wait "${tunnel_pid}" 2>/dev/null || true
   fi
-  if ! kill -0 "${tunnel_pid}" 2>/dev/null; then
-    echo "SSH tunnel exited unexpectedly:" >&2
-    tail -n 20 "${log_file}" >&2
-    exit 1
+  rm -f "${pid_file}"
+
+  if (( ssh_attempt < 6 )); then
+    sleep 2
   fi
-  sleep 1
 done
 
-echo "Timed out waiting for the local tunnel." >&2
+rm -f "${pid_file}"
+oci bastion session delete --session-id "${session_id}" --force >/dev/null 2>&1 || true
+rm -f "${session_file}"
+echo "SSH tunnel did not become ready after 6 attempts:" >&2
+tail -n 20 "${log_file}" >&2
 exit 1
