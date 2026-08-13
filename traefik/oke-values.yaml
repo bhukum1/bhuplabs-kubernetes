@@ -44,9 +44,12 @@ logs:
     format: json
 
 additionalArguments:
-  - --entrypoints.web.http.redirections.entrypoint.to=websecure
+  # The pod listens on 8443 but the public load balancer exposes HTTPS on 443.
+  # Keep this router below exact ACME HTTP-01 routes so renewals can bypass it.
+  - --entrypoints.web.http.redirections.entrypoint.to=:443
   - --entrypoints.web.http.redirections.entrypoint.scheme=https
   - --entrypoints.web.http.redirections.entrypoint.permanent=true
+  - --entrypoints.web.http.redirections.entrypoint.priority=100
 
 ports:
   metrics:
