@@ -33,10 +33,56 @@ variable "ssh_public_key" {
   type        = string
 }
 
-variable "vcn_cidr" {
-  description = "Non-overlapping CIDR for the OKE VCN."
+variable "cluster_name" {
+  description = "OKE cluster and network resource name prefix."
   type        = string
-  default     = "10.42.0.0/16"
+  default     = "localshops-production"
+}
+
+variable "environment" {
+  description = "Environment tag applied to all managed resources."
+  type        = string
+  default     = "production"
+}
+
+variable "vcn_ocid" {
+  description = "Existing VCN shared with the Always Free load balancer and DRG."
+  type        = string
+}
+
+variable "existing_public_subnet_ocid" {
+  description = "Existing public subnet used by the preserved Always Free load balancer."
+  type        = string
+}
+
+variable "existing_public_subnet_cidr" {
+  description = "CIDR of the existing load balancer subnet, allowed to reach OKE NodePorts."
+  type        = string
+  default     = "10.0.0.0/24"
+}
+
+variable "control_plane_subnet_cidr" {
+  description = "Dedicated private OKE control-plane endpoint subnet."
+  type        = string
+  default     = "10.0.10.0/24"
+}
+
+variable "worker_subnet_cidr" {
+  description = "Dedicated private OKE worker subnet."
+  type        = string
+  default     = "10.0.30.0/24"
+}
+
+variable "pod_subnet_cidr" {
+  description = "Dedicated private VCN-native pod subnet."
+  type        = string
+  default     = "10.0.64.0/18"
+}
+
+variable "management_cidrs" {
+  description = "Existing bootstrap and DRG management networks allowed to access the private Kubernetes API."
+  type        = list(string)
+  default     = ["10.0.0.0/24", "10.200.0.0/24"]
 }
 
 variable "freeform_tags" {

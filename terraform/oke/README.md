@@ -4,11 +4,11 @@ This stack creates the primary-tenancy pilot platform with a deliberate hard
 cost boundary:
 
 - OKE **Basic** cluster with a private Kubernetes API endpoint.
-- VCN-native pod networking and locked-down default security list.
+- VCN-native pod networking in dedicated subnets within an existing VCN.
 - Two private `VM.Standard.A1.Flex` workers, each 1 OCPU / 6 GB RAM / 50 GB
   boot volume.
-- Public load-balancer subnet, private worker/pod/control-plane subnets, NAT
-  gateway, and OCI service gateway.
+- Reuse of the existing Always Free load-balancer subnet and public IP, with
+  private worker/pod/control-plane subnets plus NAT and OCI service gateways.
 - No bastion VM, operator VM, paid worker fallback, WAF, or enhanced cluster.
 
 The node shape and count are intentionally not configurable. If Ampere Always

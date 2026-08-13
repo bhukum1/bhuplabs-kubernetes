@@ -3,7 +3,7 @@ locals {
     {
       managed-by  = "terraform"
       project     = "localshops"
-      environment = "pilot"
+      environment = var.environment
       cost-policy = "always-free-only"
     },
     var.freeform_tags,
@@ -24,7 +24,7 @@ module "oke" {
   region         = var.region
   home_region    = var.home_region
 
-  cluster_name             = "localshops-pilot"
+  cluster_name             = var.cluster_name
   cluster_type             = "basic"
   kubernetes_version       = var.kubernetes_version
   control_plane_is_public  = false
@@ -38,22 +38,41 @@ module "oke" {
   preferred_load_balancer  = "public"
   lockdown_default_seclist = true
 
-  create_vcn                  = true
-  vcn_name                    = "localshops-pilot"
-  vcn_dns_label               = "localshops"
-  vcn_cidrs                   = [var.vcn_cidr]
-  vcn_create_nat_gateway      = "always"
-  vcn_create_service_gateway  = "always"
-  vcn_create_internet_gateway = "always"
+  # Reuse the tenancy VCN so the existing Always Free load balancer and the
+  # cross-tenancy DRG path to node02 remain usable during and after migration.
+  create_vcn                  = false
+  vcn_id                      = var.vcn_ocid
+  vcn_create_nat_gateway      = "never"
+  vcn_create_service_gateway  = "never"
+  vcn_create_internet_gateway = "never"
+  nat_gateway_id              = oci_core_nat_gateway.oke.id
+  nat_route_table_id          = oci_core_route_table.oke_private.id
 
   subnets = {
     bastion  = { create = "never" }
     operator = { create = "never" }
-    cp       = { create = "always", newbits = 8, netnum = 10 }
+    cp       = { create = "always", cidr = var.control_plane_subnet_cidr }
     int_lb   = { create = "never" }
-    pub_lb   = { create = "always", newbits = 8, netnum = 20 }
-    workers  = { create = "always", newbits = 8, netnum = 30 }
-    pods     = { create = "always", newbits = 4, netnum = 4 }
+    pub_lb   = { create = "never", id = var.existing_public_subnet_ocid }
+    workers  = { create = "always", cidr = var.worker_subnet_cidr }
+    pods     = { create = "always", cidr = var.pod_subnet_cidr }
+  }
+
+  # The old master is the bootstrap host and node02 is the long-lived
+  # management host connected through the existing DRG.
+  control_plane_allowed_cidrs = var.management_cidrs
+
+  # The existing load balancer is not attached to the module-created public
+  # LB NSG, so explicitly permit NodePort health checks and traffic from its
+  # existing subnet only.
+  allow_rules_workers = {
+    existing_load_balancer_nodeports = {
+      protocol    = 6
+      port_min    = 30000
+      port_max    = 32767
+      source      = var.existing_public_subnet_cidr
+      source_type = "CIDR_BLOCK"
+    }
   }
 
   # Hard cost boundary: two Always Free Ampere nodes and no fallback pool.

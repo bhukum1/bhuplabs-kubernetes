@@ -6,5 +6,7 @@ home_region       = "us-ashburn-1"
 kubernetes_version = "v1.36.1"
 ssh_public_key    = "ssh-ed25519 AAAA... localshops-operator"
 
-# Change this if it overlaps an existing or future peered network.
-vcn_cidr = "10.42.0.0/16"
+cluster_name                = "localshops-production"
+environment                 = "production"
+vcn_ocid                    = "ocid1.vcn.oc1.region.replace-me"
+existing_public_subnet_ocid = "ocid1.subnet.oc1.region.replace-me"
