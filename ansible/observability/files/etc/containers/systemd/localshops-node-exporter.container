@@ -1,0 +1,21 @@
+[Unit]
+Description=Localshops node02 exporter
+After=network-online.target
+Wants=network-online.target
+
+[Container]
+Image=quay.io/prometheus/node-exporter@sha256:2e9d73002adb973441ec1c815a8e7e7c2465f5e535d859d16ee395f2ceb857c7
+ContainerName=localshops-node-exporter
+Network=host
+ReadOnly=true
+Volume=/:/host:ro,rslave
+Exec=--path.rootfs=/host --web.listen-address=127.0.0.1:9100 --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/containers/.+|var/lib/kubelet/.+)($|/)
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=900
+MemoryMax=128M
+
+[Install]
+WantedBy=multi-user.target

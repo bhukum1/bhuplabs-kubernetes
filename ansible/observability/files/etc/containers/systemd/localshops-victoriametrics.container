@@ -1,0 +1,21 @@
+[Unit]
+Description=Localshops VictoriaMetrics
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/srv/localshops-observability
+
+[Container]
+Image=docker.io/victoriametrics/victoria-metrics@sha256:0156d3e9c4be6a29dbb45b6b551a1a09d48fed3858143f1e3e0ad16d6e875cc9
+ContainerName=localshops-victoriametrics
+Network=host
+Volume=/srv/localshops-observability/victoriametrics:/storage:Z
+Exec=-httpListenAddr=127.0.0.1:8428 -storageDataPath=/storage -retentionPeriod=14d -storage.minFreeDiskSpaceBytes=5GB -memory.allowedPercent=25
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=900
+MemoryMax=2G
+
+[Install]
+WantedBy=multi-user.target

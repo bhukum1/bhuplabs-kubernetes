@@ -1,0 +1,46 @@
+global:
+  scrape_interval: 30s
+  scrape_timeout: 10s
+  external_labels:
+    site: node02-observability
+
+scrape_configs:
+  - job_name: node02
+    static_configs:
+      - targets: ["127.0.0.1:9100"]
+        labels:
+          environment: infrastructure
+          service: node02
+
+  - job_name: observability-services
+    static_configs:
+      - targets:
+          - "127.0.0.1:8428"
+          - "127.0.0.1:8429"
+          - "127.0.0.1:8880"
+          - "127.0.0.1:3100"
+          - "127.0.0.1:9093"
+          - "127.0.0.1:9115"
+          - "127.0.0.1:3000"
+
+  - job_name: public-endpoints
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - https://app.bhuplabs.dev/
+          - https://api.bhuplabs.dev/health/ready
+          - https://shops.bhuplabs.dev/
+          - https://dev-app.bhuplabs.dev/
+          - https://dev-api.bhuplabs.dev/health/ready
+          - https://dev-shops.bhuplabs.dev/
+        labels:
+          probe_scope: public
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      - target_label: __address__
+        replacement: 127.0.0.1:9115

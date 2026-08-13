@@ -1,0 +1,24 @@
+[Unit]
+Description=Localshops observability TLS proxy
+After=network-online.target localshops-grafana.service localshops-victoriametrics.service localshops-loki.service
+Requires=localshops-grafana.service localshops-victoriametrics.service localshops-loki.service
+Wants=network-online.target
+RequiresMountsFor=/srv/localshops-observability
+
+[Container]
+Image=docker.io/library/caddy@sha256:8dbca3525dd8dce671e495665a0eb297a83ec87ee30f373947d0ea93115949db
+ContainerName=localshops-caddy
+Network=host
+EnvironmentFile=/etc/localshops-observability/caddy.env
+Volume=/etc/localshops-observability/caddy/Caddyfile:/etc/caddy/Caddyfile:ro,Z
+Volume=/srv/localshops-observability/caddy/data:/data:Z
+Volume=/srv/localshops-observability/caddy/config:/config:Z
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=900
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

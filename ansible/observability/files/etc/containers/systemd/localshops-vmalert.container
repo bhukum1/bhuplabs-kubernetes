@@ -1,0 +1,21 @@
+[Unit]
+Description=Localshops vmalert
+After=network-online.target localshops-victoriametrics.service localshops-alertmanager.service
+Requires=localshops-victoriametrics.service localshops-alertmanager.service
+RequiresMountsFor=/srv/localshops-observability
+
+[Container]
+Image=docker.io/victoriametrics/vmalert@sha256:2cb333a0c0adaf2bad2aa144cf74952b4d44d788b3212f202db49b345c8dc41b
+ContainerName=localshops-vmalert
+Network=host
+Volume=/etc/localshops-observability/vmalert/rules.yml:/etc/vmalert/rules.yml:ro,Z
+Exec=-httpListenAddr=127.0.0.1:8880 -rule=/etc/vmalert/rules.yml -datasource.url=http://127.0.0.1:8428 -remoteWrite.url=http://127.0.0.1:8428 -notifier.url=http://127.0.0.1:9093
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=900
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

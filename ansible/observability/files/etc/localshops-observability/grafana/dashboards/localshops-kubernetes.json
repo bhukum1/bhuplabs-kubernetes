@@ -1,0 +1,88 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "title": "OKE nodes ready",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(kube_node_status_condition{cluster=\"localshops-oke\",condition=\"Ready\",status=\"true\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "red", "value": null}, {"color": "green", "value": 2}]}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0}
+    },
+    {
+      "title": "Running Localshops pods",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(kube_pod_status_phase{namespace=~\"localshops(-dev)?\",phase=\"Running\"})", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0}
+    },
+    {
+      "title": "Container restarts (1h)",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(increase(kube_pod_container_status_restarts_total{namespace=~\"localshops(-dev)?\"}[1h])) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0}
+    },
+    {
+      "title": "Unavailable deployment replicas",
+      "type": "stat",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum(kube_deployment_spec_replicas{namespace=~\"localshops(-dev)?\"} - kube_deployment_status_replicas_available{namespace=~\"localshops(-dev)?\"}) or vector(0)", "refId": "A"}],
+      "fieldConfig": {"defaults": {"decimals": 0, "thresholds": {"mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 1}]}}, "overrides": []},
+      "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0}
+    },
+    {
+      "title": "OKE node CPU usage",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "100 * (1 - avg by (instance) (rate(node_cpu_seconds_total{cluster=\"localshops-oke\",mode=\"idle\"}[5m])))", "legendFormat": "{{instance}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4}
+    },
+    {
+      "title": "OKE node memory usage",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "100 * (1 - node_memory_MemAvailable_bytes{cluster=\"localshops-oke\"} / node_memory_MemTotal_bytes{cluster=\"localshops-oke\"})", "legendFormat": "{{instance}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 4}
+    },
+    {
+      "title": "Pod CPU usage",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum by (namespace, pod) (rate(container_cpu_usage_seconds_total{namespace=~\"$namespace\",container!=\"\",container!=\"POD\"}[5m]))", "legendFormat": "{{namespace}} / {{pod}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "cores"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 12}
+    },
+    {
+      "title": "Pod memory working set",
+      "type": "timeseries",
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [{"expr": "sum by (namespace, pod) (container_memory_working_set_bytes{namespace=~\"$namespace\",container!=\"\",container!=\"POD\"})", "legendFormat": "{{namespace}} / {{pod}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "bytes"}, "overrides": []},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 12}
+    },
+    {
+      "title": "Recent Kubernetes warnings and errors",
+      "type": "logs",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [{"expr": "{cluster=\"localshops-oke\", job=\"integrations/kubernetes/eventhandler\"} |~ \"type=(Warning|Error)\"", "refId": "A"}],
+      "options": {"showTime": true, "showLabels": true, "wrapLogMessage": true, "sortOrder": "Descending", "dedupStrategy": "none"},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 20}
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": ["localshops", "kubernetes", "oke", "sre"],
+  "templating": {"list": [{"name": "namespace", "label": "Namespace", "type": "custom", "query": "localshops,localshops-dev", "includeAll": true, "allValue": "localshops(-dev)?", "multi": true, "current": {"selected": true, "text": ["All"], "value": ["$__all"]}}]},
+  "time": {"from": "now-6h", "to": "now"},
+  "timezone": "browser",
+  "title": "Localshops OKE and workloads",
+  "uid": "localshops-oke-workloads",
+  "version": 1
+}

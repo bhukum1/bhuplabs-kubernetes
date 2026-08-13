@@ -8,13 +8,15 @@ observability_volume:
   device_id: scsi-360453b11ea77449da2fb95849addefab
   mount_options: defaults,noatime,_netdev,nofail,x-systemd.device-timeout=30s
 
-# Keep version upgrades explicit and reviewable. Digests will be added before
-# the first deployment so mutable tags are never used in production.
+# Keep version upgrades explicit and reviewable. These multi-architecture
+# manifest digests were resolved and verified as linux/arm64 on node02.
 observability_images:
-  caddy: docker.io/library/caddy:2.10.2
-  grafana: docker.io/grafana/grafana:12.1.0
-  victoriametrics: docker.io/victoriametrics/victoria-metrics:v1.122.0
-  vmalert: docker.io/victoriametrics/vmalert:v1.122.0
-  loki: docker.io/grafana/loki:3.5.3
-  alertmanager: quay.io/prometheus/alertmanager:v0.28.1
-  blackbox_exporter: quay.io/prometheus/blackbox-exporter:v0.27.0
+  caddy: docker.io/library/caddy@sha256:8dbca3525dd8dce671e495665a0eb297a83ec87ee30f373947d0ea93115949db
+  grafana: docker.io/grafana/grafana@sha256:3b7178cb66226403407d80ef83449a00921ed1b5d6cc0c032c15d35f23cc3317
+  victoriametrics: docker.io/victoriametrics/victoria-metrics@sha256:0156d3e9c4be6a29dbb45b6b551a1a09d48fed3858143f1e3e0ad16d6e875cc9
+  vmagent: docker.io/victoriametrics/vmagent@sha256:a15182444126dcb2344267fe3ec503505748fef71ec808c583c1d23b203831c7
+  vmalert: docker.io/victoriametrics/vmalert@sha256:2cb333a0c0adaf2bad2aa144cf74952b4d44d788b3212f202db49b345c8dc41b
+  loki: docker.io/grafana/loki@sha256:3165cecce301ce5b9b6e3530284b080934a05cd5cafac3d3d82edcb887b45ecd
+  alertmanager: quay.io/prometheus/alertmanager@sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba
+  blackbox_exporter: quay.io/prometheus/blackbox-exporter@sha256:88f7d7397ad4cf415b575df60c937fef09e0534cb8a3e060bedff6e61da9e613
+  node_exporter: quay.io/prometheus/node-exporter@sha256:2e9d73002adb973441ec1c815a8e7e7c2465f5e535d859d16ee395f2ceb857c7

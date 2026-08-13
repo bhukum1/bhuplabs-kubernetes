@@ -1,0 +1,183 @@
+---
+- name: Configure the Localshops observability host
+  hosts: observability
+  become: true
+  gather_facts: true
+  vars_files:
+    - group_vars/observability.yml
+  vars:
+    observability_services:
+      - localshops-victoriametrics
+      - localshops-loki
+      - localshops-alertmanager
+      - localshops-blackbox
+      - localshops-node-exporter
+      - localshops-vmagent
+      - localshops-vmalert
+      - localshops-grafana
+      - localshops-caddy
+    observability_data_directories:
+      - {path: victoriametrics, owner: root, group: root}
+      - {path: loki, owner: "10001", group: "10001"}
+      - {path: alertmanager, owner: "65534", group: "65534"}
+      - {path: grafana, owner: "472", group: "472"}
+      - {path: caddy/data, owner: root, group: root}
+      - {path: caddy/config, owner: root, group: root}
+      - {path: containers/storage, owner: root, group: root}
+
+  tasks:
+    - name: Install the small host runtime set
+      ansible.builtin.dnf:
+        name:
+          - podman
+          - firewalld
+          - chrony
+          - xfsprogs
+        state: present
+
+    - name: Keep time synchronization and firewall active
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop:
+        - chronyd
+        - firewalld
+
+    - name: Read the mounted observability filesystem UUID
+      ansible.builtin.command:
+        argv:
+          - findmnt
+          - -n
+          - -o
+          - UUID
+          - "{{ observability_data_root }}"
+      register: observability_mounted_uuid
+      changed_when: false
+
+    - name: Refuse to use an unexpected or missing data volume
+      ansible.builtin.assert:
+        that:
+          - observability_mounted_uuid.stdout == observability_volume.filesystem_uuid
+        fail_msg: >-
+          {{ observability_data_root }} is not the verified observability volume.
+          This playbook never formats or replaces an unknown device.
+
+    - name: Create persistent service data directories
+      ansible.builtin.file:
+        path: "{{ observability_data_root }}/{{ item.path }}"
+        state: directory
+        owner: "{{ item.owner }}"
+        group: "{{ item.group }}"
+        mode: "0750"
+      loop: "{{ observability_data_directories }}"
+
+    - name: Install non-secret observability configuration
+      ansible.builtin.copy:
+        src: files/etc/localshops-observability/
+        dest: /etc/localshops-observability/
+        owner: root
+        group: root
+        directory_mode: "0755"
+        mode: "0644"
+      notify: Restart observability services
+
+    - name: Install rootful Podman Quadlet units
+      ansible.builtin.copy:
+        src: files/etc/containers/systemd/
+        dest: /etc/containers/systemd/
+        owner: root
+        group: root
+        directory_mode: "0755"
+        mode: "0644"
+      notify: Restart observability services
+
+    - name: Check required runtime-only credential files
+      ansible.builtin.stat:
+        path: "/etc/localshops-observability/{{ item }}"
+      register: observability_secret_files
+      loop:
+        - grafana.env
+        - caddy.env
+      no_log: true
+
+    - name: Refuse to start without runtime credentials
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.mode == "0600"
+          - item.stat.pw_name == "root"
+        fail_msg: >-
+          A root-owned 0600 runtime credential is missing. Follow the credential
+          bootstrap in README.md; never put it in Git or Ansible inventory.
+      loop: "{{ observability_secret_files.results }}"
+      no_log: true
+
+    - name: Check public gateway services in firewalld
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--query-service={{ item }}"
+      register: observability_firewall_queries
+      changed_when: false
+      failed_when: observability_firewall_queries.rc not in [0, 1]
+      loop:
+        - http
+        - https
+
+    - name: Permit only missing HTTP and HTTPS gateway services
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --permanent
+          - "--add-service={{ item.item }}"
+      loop: "{{ observability_firewall_queries.results }}"
+      when: item.rc == 1
+      register: observability_firewall_changes
+      changed_when: true
+
+    - name: Activate changed firewall policy
+      ansible.builtin.command:
+        argv:
+          - firewall-cmd
+          - --reload
+      when: observability_firewall_changes is changed
+      changed_when: true
+
+    - name: Regenerate Quadlet systemd services
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Start and boot-enable the observability stack
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop: "{{ observability_services }}"
+
+    - name: Wait for local service health endpoints
+      ansible.builtin.uri:
+        url: "{{ item }}"
+        status_code: 200
+        return_content: false
+      register: observability_health
+      retries: 30
+      delay: 2
+      until: observability_health.status == 200
+      loop:
+        - http://127.0.0.1:3000/api/health
+        - http://127.0.0.1:8428/health
+        - http://127.0.0.1:8429/health
+        - http://127.0.0.1:8880/health
+        - http://127.0.0.1:3100/ready
+        - http://127.0.0.1:9093/-/ready
+        - http://127.0.0.1:9115/-/healthy
+
+  handlers:
+    - name: Restart observability services
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: restarted
+        daemon_reload: true
+      loop: "{{ observability_services }}"

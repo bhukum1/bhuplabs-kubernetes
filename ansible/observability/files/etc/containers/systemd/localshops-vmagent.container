@@ -1,0 +1,23 @@
+[Unit]
+Description=Localshops vmagent
+After=network-online.target localshops-victoriametrics.service
+Wants=network-online.target
+Requires=localshops-victoriametrics.service
+RequiresMountsFor=/srv/localshops-observability
+
+[Container]
+Image=docker.io/victoriametrics/vmagent@sha256:a15182444126dcb2344267fe3ec503505748fef71ec808c583c1d23b203831c7
+ContainerName=localshops-vmagent
+Network=host
+Volume=/etc/localshops-observability/vmagent/scrape.yml:/etc/vmagent/scrape.yml:ro,Z
+Volume=/srv/localshops-observability/vmagent:/vmagent-data:Z
+Exec=-httpListenAddr=127.0.0.1:8429 -promscrape.config=/etc/vmagent/scrape.yml -remoteWrite.url=http://127.0.0.1:8428/api/v1/write -remoteWrite.tmpDataPath=/vmagent-data -memory.allowedPercent=10
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=900
+MemoryMax=512M
+
+[Install]
+WantedBy=multi-user.target

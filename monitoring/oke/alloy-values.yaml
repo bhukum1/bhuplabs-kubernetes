@@ -1,0 +1,347 @@
+fullnameOverride: alloy
+
+alloy:
+  enableReporting: false
+  envFrom:
+    - secretRef:
+        name: observability-ingest
+  resources:
+    requests:
+      cpu: 75m
+      memory: 128Mi
+    limits:
+      cpu: 400m
+      memory: 512Mi
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ALL]
+    runAsNonRoot: true
+    runAsUser: 473
+    runAsGroup: 473
+    seccompProfile:
+      type: RuntimeDefault
+  configMap:
+    content: |-
+      logging {
+        level  = "info"
+        format = "logfmt"
+      }
+
+      prometheus.remote_write "node02" {
+        endpoint {
+          url = "https://observe.bhuplabs.dev/api/v1/write"
+          basic_auth {
+            username = "ingest"
+            password = sys.env("OBSERVABILITY_INGEST_PASSWORD")
+          }
+          queue_config {
+            capacity             = 5000
+            max_samples_per_send = 1000
+            max_shards           = 2
+          }
+        }
+      }
+
+      prometheus.relabel "cluster" {
+        forward_to = [prometheus.remote_write.node02.receiver]
+
+        rule {
+          target_label = "cluster"
+          replacement  = "localshops-oke"
+        }
+      }
+
+      prometheus.scrape "kube_state_metrics" {
+        targets = [{
+          "__address__" = "kube-state-metrics.monitoring.svc.cluster.local:8080",
+          "job"         = "kube-state-metrics",
+        }]
+        scrape_interval = "30s"
+        forward_to      = [prometheus.relabel.cluster.receiver]
+      }
+
+      discovery.kubernetes "monitoring_endpoints" {
+        role = "endpoints"
+        namespaces {
+          names = ["monitoring"]
+        }
+      }
+
+      discovery.relabel "node_exporter" {
+        targets = discovery.kubernetes.monitoring_endpoints.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_service_name"]
+          regex         = "node-exporter"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_endpoint_port_name"]
+          regex         = "metrics"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_node_name"]
+          target_label  = "instance"
+        }
+        rule {
+          target_label = "job"
+          replacement  = "oke-node-exporter"
+        }
+      }
+
+      prometheus.scrape "node_exporter" {
+        targets         = discovery.relabel.node_exporter.output
+        scrape_interval = "30s"
+        forward_to      = [prometheus.relabel.cluster.receiver]
+      }
+
+      discovery.kubernetes "nodes" {
+        role = "node"
+      }
+
+      discovery.relabel "kubelet" {
+        targets = discovery.kubernetes.nodes.targets
+
+        rule {
+          target_label = "__address__"
+          replacement  = "kubernetes.default.svc:443"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_node_name"]
+          target_label  = "instance"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_node_name"]
+          regex         = "(.+)"
+          target_label  = "__metrics_path__"
+          replacement   = "/api/v1/nodes/$1/proxy/metrics"
+        }
+        rule {
+          target_label = "job"
+          replacement  = "kubelet"
+        }
+      }
+
+      prometheus.scrape "kubelet" {
+        targets    = discovery.relabel.kubelet.output
+        scheme     = "https"
+        forward_to = [prometheus.relabel.cluster.receiver]
+        authorization {
+          credentials_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        }
+        tls_config {
+          ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        }
+      }
+
+      discovery.relabel "cadvisor" {
+        targets = discovery.kubernetes.nodes.targets
+
+        rule {
+          target_label = "__address__"
+          replacement  = "kubernetes.default.svc:443"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_node_name"]
+          target_label  = "instance"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_node_name"]
+          regex         = "(.+)"
+          target_label  = "__metrics_path__"
+          replacement   = "/api/v1/nodes/$1/proxy/metrics/cadvisor"
+        }
+        rule {
+          target_label = "job"
+          replacement  = "cadvisor"
+        }
+      }
+
+      prometheus.scrape "cadvisor" {
+        targets    = discovery.relabel.cadvisor.output
+        scheme     = "https"
+        forward_to = [prometheus.relabel.cluster.receiver]
+        authorization {
+          credentials_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+        }
+        tls_config {
+          ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+        }
+      }
+
+      discovery.kubernetes "traefik_pods" {
+        role = "pod"
+        namespaces {
+          names = ["traefik"]
+        }
+      }
+
+      discovery.relabel "traefik" {
+        targets = discovery.kubernetes.traefik_pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          regex         = "traefik"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_port_name"]
+          regex         = "metrics"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_ip"]
+          regex         = "(.+)"
+          target_label  = "__address__"
+          replacement   = "$1:9101"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "instance"
+        }
+        rule {
+          target_label = "job"
+          replacement  = "traefik"
+        }
+      }
+
+      prometheus.scrape "traefik" {
+        targets         = discovery.relabel.traefik.output
+        scrape_interval = "30s"
+        forward_to      = [prometheus.relabel.cluster.receiver]
+      }
+
+      prometheus.scrape "localshops_prod_api" {
+        targets = [{
+          "__address__" = "api.localshops.svc.cluster.local:8000",
+          "environment" = "production",
+          "namespace"   = "localshops",
+          "job"         = "localshops-api",
+        }]
+        metrics_path    = "/metrics"
+        scrape_interval = "30s"
+        forward_to      = [prometheus.relabel.cluster.receiver]
+      }
+
+      prometheus.scrape "localshops_dev_api" {
+        targets = [{
+          "__address__" = "api.localshops-dev.svc.cluster.local:8000",
+          "environment" = "development",
+          "namespace"   = "localshops-dev",
+          "job"         = "localshops-api",
+        }]
+        metrics_path    = "/metrics"
+        scrape_interval = "30s"
+        forward_to      = [prometheus.relabel.cluster.receiver]
+      }
+
+      discovery.kubernetes "pod_logs" {
+        role = "pod"
+      }
+
+      discovery.relabel "pod_logs" {
+        targets = discovery.kubernetes.pod_logs.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          regex         = "localshops|localshops-dev|traefik|cert-manager|monitoring"
+          action        = "keep"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label  = "namespace"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label  = "pod"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label  = "container"
+        }
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          target_label  = "app"
+        }
+        rule {
+          target_label = "cluster"
+          replacement  = "localshops-oke"
+        }
+      }
+
+      loki.source.kubernetes "pods" {
+        targets    = discovery.relabel.pod_logs.output
+        forward_to = [loki.process.pods.receiver]
+      }
+
+      loki.process "pods" {
+        stage.drop {
+          expression          = `.*"(GET|HEAD) /health/(ready|live|startup).*" 200 .*`
+          drop_counter_reason = "health_check_noise"
+        }
+        stage.drop {
+          expression          = `.*"(GET|HEAD) /metrics.*" 200 .*`
+          drop_counter_reason = "metrics_scrape_noise"
+        }
+        forward_to = [loki.write.node02.receiver]
+      }
+
+      loki.source.kubernetes_events "events" {
+        job_name   = "integrations/kubernetes/eventhandler"
+        log_format = "logfmt"
+        forward_to = [loki.process.events.receiver]
+      }
+
+      loki.process "events" {
+        stage.static_labels {
+          values = {
+            cluster = "localshops-oke",
+          }
+        }
+        forward_to = [loki.write.node02.receiver]
+      }
+
+      loki.write "node02" {
+        endpoint {
+          url = "https://observe.bhuplabs.dev/loki/api/v1/push"
+          basic_auth {
+            username = "ingest"
+            password = sys.env("OBSERVABILITY_INGEST_PASSWORD")
+          }
+        }
+      }
+
+controller:
+  type: deployment
+  replicas: 1
+  minReadySeconds: 10
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 473
+    runAsGroup: 473
+    fsGroup: 473
+    fsGroupChangePolicy: OnRootMismatch
+    seccompProfile:
+      type: RuntimeDefault
+
+rbac:
+  create: true
+  clusterRules:
+    - apiGroups: [""]
+      resources: ["nodes", "nodes/pods", "nodes/metrics", "nodes/proxy"]
+      verbs: ["get", "list", "watch"]
+    - nonResourceURLs: ["/metrics"]
+      verbs: ["get"]
+
+serviceAccount:
+  create: true
+  automountServiceAccountToken: true
+
+configReloader:
+  enabled: true
+
+service:
+  enabled: true
+  type: ClusterIP

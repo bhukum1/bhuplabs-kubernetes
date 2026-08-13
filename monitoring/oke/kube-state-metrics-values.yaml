@@ -1,0 +1,29 @@
+fullnameOverride: kube-state-metrics
+
+automountServiceAccountToken: true
+
+resources:
+  requests:
+    cpu: 20m
+    memory: 48Mi
+  limits:
+    cpu: 150m
+    memory: 160Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+  readOnlyRootFilesystem: true
+
+prometheus:
+  monitor:
+    enabled: false
+
+selfMonitor:
+  enabled: false

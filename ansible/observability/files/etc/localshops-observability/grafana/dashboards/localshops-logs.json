@@ -1,0 +1,45 @@
+{
+  "annotations": {"list": []},
+  "editable": false,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "title": "Log volume by application",
+      "type": "timeseries",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [{"expr": "sum by (namespace, app) (count_over_time({namespace=~\"$namespace\", app=~\"$app\"}[$__interval]))", "legendFormat": "{{namespace}} / {{app}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 0}
+    },
+    {
+      "title": "Error-like log volume",
+      "type": "timeseries",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [{"expr": "sum by (namespace, app) (count_over_time({namespace=~\"$namespace\", app=~\"$app\"} |~ \"(?i)(error|exception|traceback|fatal|panic|\\\" [45][0-9]{2} )\" [$__interval]))", "legendFormat": "{{namespace}} / {{app}}", "refId": "A"}],
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "title": "Application logs",
+      "type": "logs",
+      "datasource": {"type": "loki", "uid": "loki"},
+      "targets": [{"expr": "{namespace=~\"$namespace\", app=~\"$app\", container=~\"$container\"} |~ \"(?i)$search\"", "refId": "A"}],
+      "options": {"showTime": true, "showLabels": true, "wrapLogMessage": true, "prettifyLogMessage": false, "enableLogDetails": true, "sortOrder": "Descending", "dedupStrategy": "none"},
+      "gridPos": {"h": 18, "w": 24, "x": 0, "y": 7}
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 41,
+  "tags": ["localshops", "logs", "loki", "sre"],
+  "templating": {"list": [
+    {"name": "namespace", "label": "Namespace", "type": "custom", "query": "localshops,localshops-dev,traefik,cert-manager,monitoring", "includeAll": true, "allValue": ".*", "multi": true, "current": {"selected": true, "text": ["localshops", "localshops-dev"], "value": ["localshops", "localshops-dev"]}},
+    {"name": "app", "label": "Application", "type": "query", "datasource": {"type": "loki", "uid": "loki"}, "query": {"type": 1, "label": "app", "stream": "{namespace=~\"$namespace\"}"}, "includeAll": true, "allValue": ".*", "multi": true, "refresh": 1, "current": {"selected": true, "text": ["All"], "value": ["$__all"]}},
+    {"name": "container", "label": "Container", "type": "query", "datasource": {"type": "loki", "uid": "loki"}, "query": {"type": 1, "label": "container", "stream": "{namespace=~\"$namespace\", app=~\"$app\"}"}, "includeAll": true, "allValue": ".*", "multi": true, "refresh": 1, "current": {"selected": true, "text": ["All"], "value": ["$__all"]}},
+    {"name": "search", "label": "Search (regex)", "type": "textbox", "query": ".*", "current": {"selected": true, "text": ".*", "value": ".*"}}
+  ]},
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "title": "Localshops application logs",
+  "uid": "localshops-application-logs",
+  "version": 1
+}

@@ -1,0 +1,22 @@
+[Unit]
+Description=Localshops Loki
+After=network-online.target
+Wants=network-online.target
+RequiresMountsFor=/srv/localshops-observability
+
+[Container]
+Image=docker.io/grafana/loki@sha256:3165cecce301ce5b9b6e3530284b080934a05cd5cafac3d3d82edcb887b45ecd
+ContainerName=localshops-loki
+Network=host
+Volume=/etc/localshops-observability/loki/config.yml:/etc/loki/config.yml:ro,Z
+Volume=/srv/localshops-observability/loki:/loki:Z
+Exec=-config.file=/etc/loki/config.yml -target=all
+
+[Service]
+Restart=always
+RestartSec=5
+TimeoutStartSec=900
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

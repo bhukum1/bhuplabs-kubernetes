@@ -1,0 +1,32 @@
+replicas: 1
+
+args:
+  - --cert-dir=/tmp
+  - --secure-port=10250
+  - --kubelet-preferred-address-types=InternalIP,Hostname,ExternalIP
+  - --kubelet-use-node-status-port
+  - --metric-resolution=30s
+
+resources:
+  requests:
+    cpu: 25m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+podDisruptionBudget:
+  enabled: false
+
+serviceAccount:
+  create: true
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault

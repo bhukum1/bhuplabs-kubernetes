@@ -1,0 +1,111 @@
+groups:
+  - name: endpoint-availability
+    rules:
+      - alert: PublicEndpointDown
+        expr: probe_success{job="public-endpoints"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: Public endpoint is unavailable
+          description: "{{ $labels.instance }} has failed external HTTPS probes for more than two minutes."
+      - alert: PublicEndpointSlow
+        expr: probe_duration_seconds{job="public-endpoints"} > 3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Public endpoint is slow
+          description: "{{ $labels.instance }} has taken more than three seconds for ten minutes."
+
+  - name: scrape-health
+    rules:
+      - alert: MonitoringTargetDown
+        expr: up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Monitoring target is down
+          description: "{{ $labels.job }} target {{ $labels.instance }} has not been scraped for five minutes."
+      - alert: OKECollectorMissing
+        expr: absent(up{cluster="localshops-oke"})
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: OKE telemetry is missing
+          description: No OKE metrics have reached VictoriaMetrics for five minutes.
+
+  - name: infrastructure-capacity
+    rules:
+      - alert: HostCPUHigh
+        expr: 1 - avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) > 0.90
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Host CPU usage is above 90%
+          description: "{{ $labels.instance }} has sustained high CPU usage for 15 minutes."
+      - alert: HostMemoryHigh
+        expr: 1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) > 0.90
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Host memory usage is above 90%
+          description: "{{ $labels.instance }} has sustained high memory usage for 15 minutes."
+      - alert: HostFilesystemLow
+        expr: node_filesystem_avail_bytes{fstype!~"tmpfs|overlay",mountpoint=~"/|/srv/localshops-observability"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay",mountpoint=~"/|/srv/localshops-observability"} < 0.15
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Filesystem has less than 15% free space
+          description: "{{ $labels.instance }} mount {{ $labels.mountpoint }} is nearly full."
+
+  - name: kubernetes-workloads
+    rules:
+      - alert: KubernetesNodeNotReady
+        expr: kube_node_status_condition{condition="Ready",status="true"} == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Kubernetes node is not ready
+          description: "OKE node {{ $labels.node }} has been NotReady for five minutes."
+      - alert: LocalshopsDeploymentUnavailable
+        expr: kube_deployment_status_replicas_available{namespace=~"localshops(-dev)?"} < kube_deployment_spec_replicas{namespace=~"localshops(-dev)?"}
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Localshops deployment has unavailable replicas
+          description: "{{ $labels.namespace }}/{{ $labels.deployment }} is below its desired replica count."
+      - alert: PodCrashLooping
+        expr: max_over_time(kube_pod_container_status_waiting_reason{reason="CrashLoopBackOff"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Pod is crash-looping
+          description: "{{ $labels.namespace }}/{{ $labels.pod }} container {{ $labels.container }} is in CrashLoopBackOff."
+
+  - name: localshops-api
+    rules:
+      - alert: LocalshopsAPIHighErrorRate
+        expr: sum by (environment) (rate(localshops_http_requests_total{status_code=~"5.."}[5m])) / clamp_min(sum by (environment) (rate(localshops_http_requests_total[5m])), 0.001) > 0.05
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: Localshops API 5xx rate exceeds 5%
+          description: "The {{ $labels.environment }} API has exceeded a 5% server-error rate for ten minutes."
+      - alert: LocalshopsAPIHighLatency
+        expr: histogram_quantile(0.95, sum by (le, environment) (rate(localshops_http_request_duration_seconds_bucket[5m]))) > 1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Localshops API p95 latency exceeds one second
+          description: "The {{ $labels.environment }} API has been slow for ten minutes."

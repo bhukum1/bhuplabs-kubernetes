@@ -1,0 +1,40 @@
+{
+  admin 127.0.0.1:2019
+}
+
+grafana.bhuplabs.dev {
+  encode zstd gzip
+  header {
+    Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    X-Content-Type-Options nosniff
+    X-Frame-Options DENY
+    Referrer-Policy strict-origin-when-cross-origin
+  }
+  reverse_proxy 127.0.0.1:3000
+}
+
+observe.bhuplabs.dev {
+  @metrics path /api/v1/write /api/v1/write/*
+  handle @metrics {
+    basic_auth {
+      ingest {$OBSERVABILITY_INGEST_PASSWORD_HASH}
+    }
+    reverse_proxy 127.0.0.1:8428
+  }
+
+  @logs path /loki/api/v1/push
+  handle @logs {
+    basic_auth {
+      ingest {$OBSERVABILITY_INGEST_PASSWORD_HASH}
+    }
+    reverse_proxy 127.0.0.1:3100
+  }
+
+  handle /health {
+    respond "ok" 200
+  }
+
+  handle {
+    respond "not found" 404
+  }
+}
