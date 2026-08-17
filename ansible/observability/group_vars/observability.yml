@@ -12,7 +12,7 @@ observability_volume:
 # manifest digests were resolved and verified as linux/arm64 on node02.
 observability_images:
   caddy: docker.io/library/caddy@sha256:8dbca3525dd8dce671e495665a0eb297a83ec87ee30f373947d0ea93115949db
-  grafana: docker.io/grafana/grafana@sha256:3b7178cb66226403407d80ef83449a00921ed1b5d6cc0c032c15d35f23cc3317
+  grafana: docker.io/grafana/grafana@sha256:c3a47b8f5c031482ba3ae8212d18ca32dcf69cecac34668897420d5a3146a6c9
   victoriametrics: docker.io/victoriametrics/victoria-metrics@sha256:0156d3e9c4be6a29dbb45b6b551a1a09d48fed3858143f1e3e0ad16d6e875cc9
   vmagent: docker.io/victoriametrics/vmagent@sha256:a15182444126dcb2344267fe3ec503505748fef71ec808c583c1d23b203831c7
   vmalert: docker.io/victoriametrics/vmalert@sha256:2cb333a0c0adaf2bad2aa144cf74952b4d44d788b3212f202db49b345c8dc41b

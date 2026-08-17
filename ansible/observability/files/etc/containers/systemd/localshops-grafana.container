@@ -5,10 +5,13 @@ Requires=localshops-victoriametrics.service localshops-loki.service
 RequiresMountsFor=/srv/localshops-observability
 
 [Container]
-Image=docker.io/grafana/grafana@sha256:3b7178cb66226403407d80ef83449a00921ed1b5d6cc0c032c15d35f23cc3317
+Image=docker.io/grafana/grafana@sha256:c3a47b8f5c031482ba3ae8212d18ca32dcf69cecac34668897420d5a3146a6c9
 ContainerName=localshops-grafana
 Network=host
+Entrypoint=/usr/share/grafana/bin/grafana
+Exec=server --homepath=/usr/share/grafana --config=/etc/grafana/grafana.ini --packaging=docker cfg:default.log.mode=console cfg:default.paths.data=/var/lib/grafana cfg:default.paths.logs=/var/log/grafana cfg:default.paths.plugins=/var/lib/grafana/plugins cfg:default.paths.provisioning=/etc/grafana/provisioning
 EnvironmentFile=/etc/localshops-observability/grafana.env
+Environment=HOME=/usr/share/grafana
 Environment=GF_SERVER_HTTP_ADDR=127.0.0.1
 Environment=GF_SERVER_HTTP_PORT=3000
 Environment=GF_SERVER_ROOT_URL=https://grafana.bhuplabs.dev
