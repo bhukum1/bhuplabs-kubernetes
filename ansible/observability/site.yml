@@ -12,7 +12,6 @@
       - localshops-alertmanager
       - localshops-blackbox
       - localshops-node-exporter
-      - localshops-postgres-exporter
       - localshops-vmagent
       - localshops-vmalert
       - localshops-grafana
@@ -35,6 +34,7 @@
           - chrony
           - xfsprogs
           - sqlite
+          - dnf-automatic
         state: present
 
     - name: Keep time synchronization and firewall active
@@ -45,6 +45,86 @@
       loop:
         - chronyd
         - firewalld
+
+    - name: Persist SELinux enforcing mode
+      ansible.builtin.lineinfile:
+        path: /etc/selinux/config
+        regexp: '^SELINUX='
+        line: SELINUX=enforcing
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Read the current SELinux mode
+      ansible.builtin.command:
+        argv: [getenforce]
+      register: node02_selinux_mode
+      changed_when: false
+
+    - name: Enforce SELinux immediately
+      ansible.builtin.command:
+        argv: [setenforce, "1"]
+      when: node02_selinux_mode.stdout != "Enforcing"
+
+    - name: Limit automatic package updates to security advisories
+      ansible.builtin.lineinfile:
+        path: /etc/dnf/automatic.conf
+        regexp: '^upgrade_type\s*='
+        line: upgrade_type = security
+
+    - name: Enable automatic package installation
+      ansible.builtin.lineinfile:
+        path: /etc/dnf/automatic.conf
+        regexp: '^apply_updates\s*='
+        line: apply_updates = yes
+
+    - name: Keep automatic reboots disabled
+      ansible.builtin.lineinfile:
+        path: /etc/dnf/automatic.conf
+        regexp: '^reboot\s*='
+        line: reboot = never
+
+    - name: Enable the daily automatic security-update timer
+      ansible.builtin.systemd_service:
+        name: dnf-automatic-install.timer
+        enabled: true
+        state: started
+
+    - name: Stop host services replaced by the Localshops monitoring stack
+      ansible.builtin.systemd_service:
+        name: "{{ item }}"
+        state: stopped
+        enabled: false
+      loop:
+        - pmlogger
+        - pmcd
+        - rpcbind.socket
+        - rpcbind
+
+    - name: Install SSH daemon hardening
+      ansible.builtin.copy:
+        src: files/etc/ssh/sshd_config.d/00-localshops-hardening.conf
+        dest: /etc/ssh/sshd_config.d/00-localshops-hardening.conf
+        owner: root
+        group: root
+        mode: "0600"
+      register: node02_sshd_hardening
+
+    - name: Remove the superseded late-order SSH hardening file
+      ansible.builtin.file:
+        path: /etc/ssh/sshd_config.d/60-localshops-hardening.conf
+        state: absent
+
+    - name: Validate the hardened SSH daemon configuration
+      ansible.builtin.command:
+        argv: [sshd, -t]
+      changed_when: false
+
+    - name: Reload SSH after a validated hardening change
+      ansible.builtin.systemd_service:
+        name: sshd
+        state: reloaded
+      when: node02_sshd_hardening is changed
 
     - name: Read the mounted observability filesystem UUID
       ansible.builtin.command:
@@ -94,6 +174,27 @@
         mode: "0644"
       notify: Restart observability services
 
+    - name: Check for the retired node02 PostgreSQL exporter Quadlet
+      ansible.builtin.stat:
+        path: /etc/containers/systemd/localshops-postgres-exporter.container
+      register: retired_postgres_exporter_quadlet
+
+    - name: Stop the retired node02 PostgreSQL exporter
+      ansible.builtin.systemd_service:
+        name: localshops-postgres-exporter
+        state: stopped
+        enabled: false
+      when: retired_postgres_exporter_quadlet.stat.exists
+
+    - name: Remove retired node02 PostgreSQL exporter files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/containers/systemd/localshops-postgres-exporter.container
+        - /etc/localshops-observability/postgres-exporter.env
+        - /etc/localshops-observability/postgres-exporter
+
     - name: Install host backup script
       ansible.builtin.copy:
         src: files/usr/local/sbin/localshops-observability-backup
@@ -125,7 +226,6 @@
       loop:
         - grafana.env
         - caddy.env
-        - postgres-exporter.env
       no_log: true
 
     - name: Refuse to start without runtime credentials
@@ -139,20 +239,6 @@
           bootstrap in README.md; never put it in Git or Ansible inventory.
       loop: "{{ observability_secret_files.results }}"
       no_log: true
-
-    - name: Permit the localhost-only PostgreSQL monitoring role
-      ansible.builtin.lineinfile:
-        path: /var/lib/pgsql/data/pg_hba.conf
-        line: host    postgres        localshops_monitor 127.0.0.1/32            scram-sha-256
-        insertbefore: '^host\s+all\s+all\s+127\.0\.0\.1/32'
-        backup: true
-      register: observability_pg_hba
-
-    - name: Reload PostgreSQL authentication after an exact rule change
-      ansible.builtin.systemd_service:
-        name: postgresql
-        state: reloaded
-      when: observability_pg_hba is changed
 
     - name: Check public gateway services in firewalld
       ansible.builtin.command:
@@ -220,20 +306,6 @@
         - http://127.0.0.1:3100/ready
         - http://127.0.0.1:9093/-/ready
         - http://127.0.0.1:9115/-/healthy
-        - http://127.0.0.1:9187/metrics
-
-    - name: Confirm the PostgreSQL exporter can authenticate and query
-      ansible.builtin.uri:
-        url: http://127.0.0.1:9187/metrics
-        status_code: 200
-        return_content: true
-      register: observability_postgres_metrics
-
-    - name: Refuse a database exporter that cannot reach PostgreSQL
-      ansible.builtin.assert:
-        that:
-          - "'pg_up 1' in observability_postgres_metrics.content"
-        fail_msg: PostgreSQL exporter is running but cannot query the database.
 
   handlers:
     - name: Restart observability services

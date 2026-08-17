@@ -92,7 +92,7 @@ groups:
   - name: postgresql
     rules:
       - alert: PostgreSQLExporterDown
-        expr: pg_up == 0 or absent(pg_up)
+        expr: pg_up{job="postgres-exporter"} == 0 or absent(pg_up{job="postgres-exporter"})
         for: 5m
         labels:
           severity: critical
@@ -101,7 +101,7 @@ groups:
           summary: PostgreSQL monitoring or database is unavailable
           description: PostgreSQL has not produced a successful exporter scrape for five minutes.
       - alert: PostgreSQLTooManyConnections
-        expr: sum(pg_stat_activity_count{datname!=""}) / max(pg_settings_max_connections) > 0.80
+        expr: sum by (instance, environment, namespace) (pg_stat_activity_count{job="postgres-exporter",datname!=""}) / max by (instance, environment, namespace) (pg_settings_max_connections{job="postgres-exporter"}) > 0.80
         for: 10m
         labels:
           severity: warning
@@ -110,7 +110,7 @@ groups:
           summary: PostgreSQL connection usage exceeds 80%
           description: PostgreSQL connection capacity has remained high for ten minutes.
       - alert: PostgreSQLDeadlocks
-        expr: increase(pg_stat_database_deadlocks[15m]) > 0
+        expr: increase(pg_stat_database_deadlocks{job="postgres-exporter"}[15m]) > 0
         for: 0m
         labels:
           severity: warning
@@ -118,6 +118,45 @@ groups:
         annotations:
           summary: PostgreSQL deadlock detected
           description: "Database {{ $labels.datname }} recorded a deadlock during the last 15 minutes."
+
+  - name: database-recovery
+    rules:
+      - alert: PostgreSQLBackupStale
+        expr: time() - kube_cronjob_status_last_successful_time{namespace="localshops",cronjob="postgres-backup"} > 36 * 60 * 60 or absent(kube_cronjob_status_last_successful_time{namespace="localshops",cronjob="postgres-backup"})
+        for: 15m
+        labels:
+          severity: critical
+          service: postgresql-backup
+        annotations:
+          summary: Production PostgreSQL backup is stale
+          description: No successful production database backup has been recorded in the last 36 hours.
+      - alert: PostgreSQLRestoreCheckStale
+        expr: time() - kube_cronjob_status_last_successful_time{namespace="localshops",cronjob="postgres-restore-check"} > 8 * 24 * 60 * 60 or absent(kube_cronjob_status_last_successful_time{namespace="localshops",cronjob="postgres-restore-check"})
+        for: 30m
+        labels:
+          severity: critical
+          service: postgresql-backup
+        annotations:
+          summary: PostgreSQL restore verification is stale
+          description: No successful isolated restore check has been recorded in the last eight days.
+      - alert: PostgreSQLRecoveryJobFailed
+        expr: kube_job_status_failed{namespace="localshops",job_name=~"postgres-(backup|restore-check)-.+"} > 0
+        for: 5m
+        labels:
+          severity: critical
+          service: postgresql-backup
+        annotations:
+          summary: PostgreSQL recovery job failed
+          description: "{{ $labels.namespace }}/{{ $labels.job_name }} has failed."
+      - alert: PostgreSQLVolumeLow
+        expr: kubelet_volume_stats_available_bytes{namespace=~"localshops(-dev)?",persistentvolumeclaim="postgres-data"} / kubelet_volume_stats_capacity_bytes{namespace=~"localshops(-dev)?",persistentvolumeclaim="postgres-data"} < 0.15
+        for: 15m
+        labels:
+          severity: warning
+          service: postgresql
+        annotations:
+          summary: PostgreSQL volume has less than 15% free space
+          description: "{{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is nearing capacity."
 
   - name: kubernetes-workloads
     rules:

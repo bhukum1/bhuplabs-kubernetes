@@ -62,6 +62,23 @@ module "oke" {
   # subnet. Worker and pod access is handled by their NSG-to-NSG rules.
   control_plane_allowed_cidrs = var.management_cidrs
 
+  # The public load balancer must be attached to module.oke.pub_lb_nsg_id.
+  # These are the only internet-facing ports permitted by that NSG.
+  allow_rules_public_lb = {
+    public_http = {
+      protocol    = 6
+      port        = 80
+      source      = "0.0.0.0/0"
+      source_type = "CIDR_BLOCK"
+    }
+    public_https = {
+      protocol    = 6
+      port        = 443
+      source      = "0.0.0.0/0"
+      source_type = "CIDR_BLOCK"
+    }
+  }
+
   # The existing load balancer is not attached to the module-created public
   # LB NSG, so explicitly permit NodePort health checks and traffic from its
   # existing subnet only.

@@ -33,3 +33,8 @@ output "bastion_private_endpoint" {
   description = "Private VCN address allocated to the managed Bastion endpoint."
   value       = oci_bastion_bastion.oke.private_endpoint_ip_address
 }
+
+output "public_load_balancer_nsg_id" {
+  description = "NSG that must be attached to the preserved public load balancer."
+  value       = module.oke.pub_lb_nsg_id
+}

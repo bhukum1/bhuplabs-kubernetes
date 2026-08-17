@@ -9,6 +9,8 @@ cost boundary:
   boot volume.
 - Reuse of the existing Always Free load-balancer subnet and public IP, with
   private worker/pod/control-plane subnets plus NAT and OCI service gateways.
+- Explicit management of the reused VCN default security list: only public
+  HTTP/HTTPS ingress remains; OKE component traffic is authorized by NSGs.
 - Egress through a stable NAT gateway; node02 PostgreSQL permits TLS traffic
   only from that NAT gateway's public `/32` address.
 - A free OCI-managed Bastion in a dedicated private `/29`; no bastion VM,
@@ -44,6 +46,18 @@ terraform -chdir=terraform/oke plan
 
 Never commit Terraform state, a kubeconfig, OCI API keys, private SSH keys, or
 Resource Manager variables containing credentials.
+
+## Preserved load balancer security
+
+The load balancer predates this stack, so OCI Resource Manager does not own the
+load-balancer resource itself. After applying the stack, attach
+`public_load_balancer_nsg_id` to that load balancer and verify both backend sets
+are healthy. The NSG permits public TCP/80 and TCP/443 and permits egress only
+to the OKE worker/pod NSGs. The inherited VCN default security list is managed
+by this stack and contains only public TCP/80, TCP/443 and stateful egress.
+
+Do not restore the historical unrestricted TCP or `protocol = all` ingress
+rules. Administrative Kubernetes access belongs exclusively on OCI Bastion.
 
 ## Private API operations
 

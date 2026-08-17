@@ -16,3 +16,7 @@ oke-disconnect
 port-forwarding session, generates `~/.kube/config`, and binds the tunnel only
 to node02 loopback. The cluster API remains private and the Bastion accepts SSH
 connections only from node02's fixed public `/32`.
+
+Running it again is safe. It reuses a healthy tunnel, but detects and retires
+the stale SSH process left behind when a three-hour Bastion session expires
+before creating a replacement session.

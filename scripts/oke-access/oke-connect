@@ -22,9 +22,25 @@ mkdir -p "${state_dir}" "${HOME}/.ssh" "${HOME}/.kube"
 chmod 700 "${state_dir}" "${HOME}/.ssh" "${HOME}/.kube"
 
 if [[ -s "${pid_file}" ]] && kill -0 "$(<"${pid_file}")" 2>/dev/null; then
-  echo "OKE tunnel is already running (PID $(<"${pid_file}"))."
-  kubectl --kubeconfig "${kubeconfig_file}" get nodes
-  exit 0
+  tunnel_pid="$(<"${pid_file}")"
+  if (exec 3<>"/dev/tcp/127.0.0.1/${OKE_LOCAL_PORT}") 2>/dev/null \
+    && kubectl --kubeconfig "${kubeconfig_file}" get --raw=/readyz --request-timeout=5s >/dev/null 2>&1; then
+    echo "OKE tunnel is already healthy (PID ${tunnel_pid})."
+    kubectl --kubeconfig "${kubeconfig_file}" get nodes
+    exit 0
+  fi
+
+  echo "Retiring stale OKE tunnel (PID ${tunnel_pid})."
+  kill "${tunnel_pid}" 2>/dev/null || true
+  wait "${tunnel_pid}" 2>/dev/null || true
+  rm -f "${pid_file}"
+
+  if [[ -s "${session_file}" ]]; then
+    oci bastion session delete \
+      --session-id "$(<"${session_file}")" \
+      --force >/dev/null 2>&1 || true
+    rm -f "${session_file}"
+  fi
 fi
 
 if [[ ! -f "${key_file}" ]]; then

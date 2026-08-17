@@ -7,9 +7,11 @@ Wants=network-online.target
 Image=quay.io/prometheus/node-exporter@sha256:2e9d73002adb973441ec1c815a8e7e7c2465f5e535d859d16ee395f2ceb857c7
 ContainerName=localshops-node-exporter
 Network=host
+PodmanArgs=--pid=host
 ReadOnly=true
 Volume=/:/host:ro,rslave
-Exec=--path.rootfs=/host --web.listen-address=127.0.0.1:9100 --collector.textfile.directory=/host/var/lib/node_exporter/textfile_collector --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/containers/.+|var/lib/kubelet/.+)($|/)
+Volume=/var/lib/node_exporter/textfile_collector:/textfile:ro,z
+Exec=--path.rootfs=/host --web.listen-address=127.0.0.1:9100 --collector.textfile.directory=/textfile --collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/containers/.+|var/lib/kubelet/.+)($|/)
 
 [Service]
 Restart=always

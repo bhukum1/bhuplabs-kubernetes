@@ -10,9 +10,11 @@ Pinned charts:
 - prometheus-node-exporter `4.56.1` (application `1.12.1`)
 - Grafana Alloy `1.11.1` (application `1.18.1`)
 - redis_exporter `1.88.0`, pinned to its linux/arm64 image digest
+- postgres_exporter `0.18.1`, pinned to its multi-architecture image digest
 
 Alloy collects kubelet/cAdvisor, node, workload, Traefik, Localshops API and
-Kubernetes-event metrics. It ships selected Localshops, Traefik, cert-manager
+Kubernetes-event metrics, including Redis and PostgreSQL dependency health. It
+ships selected Localshops, Traefik, cert-manager
 and monitoring logs to node02; successful health/metrics request logs are
 dropped before transmission.
 
@@ -32,6 +34,7 @@ helm upgrade --install node-exporter prometheus-community/prometheus-node-export
 kubectl apply -f application-network-policies.yaml
 kubectl apply -f monitoring-network-policies.yaml
 kubectl apply -f redis-exporters.yaml
+kubectl apply -f postgres-exporters.yaml
 
 helm upgrade --install alloy grafana/alloy \
   --version 1.11.1 -n monitoring -f alloy-values.yaml

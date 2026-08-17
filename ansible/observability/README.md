@@ -13,7 +13,8 @@ OKE so a cluster outage does not remove its dashboards, logs, probes or alerts.
 - vmalert plus Alertmanager: evaluated alert rules and notification routing.
 - Blackbox exporter: external HTTPS availability/latency probes.
 - node-exporter: node02 CPU, memory, filesystem and network metrics.
-- postgres-exporter: database availability, capacity, activity and deadlocks.
+- PostgreSQL exporters run beside the DEV and production databases in OKE;
+  Alloy forwards their dependency metrics to this control plane.
 
 Grafana provisions five version-controlled dashboards: production overview,
 HTTP/API status and latency, OKE/workloads, application logs, and PostgreSQL/
@@ -43,17 +44,15 @@ Secrets are deliberately absent from Git and inventory. The live host uses:
 
 - `/etc/localshops-observability/grafana.env` — Grafana administrator only;
 - `/etc/localshops-observability/caddy.env` — ingestion password hash only;
-- `/etc/localshops-observability/postgres-exporter.env` — read-only database monitor only;
 - OKE Secret `monitoring/observability-ingest` — ingestion password only.
 
 All files must be root-owned mode `0600`. The original bootstrap credential can
 remain in a root-only offline recovery file, but it is not mounted into any
 container.
 
-Create the `localshops_monitor` PostgreSQL login once, grant it only the built-in
-`pg_monitor` role, and place its localhost DSN in `postgres-exporter.env`. The
-playbook manages the exact localhost SCRAM pg_hba rule but deliberately does not
-generate or rotate database credentials stored outside Git.
+Each application namespace holds a runtime-only `postgres-monitor` Secret for a
+dedicated `localshops_monitor` login granted only the built-in `pg_monitor`
+role. The Secret and password are never committed to Git.
 
 ## Apply
 
@@ -66,7 +65,11 @@ ansible-playbook site.yml
 
 The playbook validates the disk, installs only the small required package set,
 copies configuration and Quadlets, opens HTTP/HTTPS in firewalld, starts every
-service, and waits for all local health endpoints.
+service, and waits for all local health endpoints. It also disables the unused
+PCP and RPC services, requires key-only SSH through the `opc` account, denies
+root login, keeps every monitoring listener except Caddy on loopback, enforces
+SELinux, and installs security-only package updates daily without automatic
+reboots.
 
 A daily systemd timer creates an atomic, integrity-checked Grafana SQLite backup
 and an Alertmanager state archive under `/var/backups/localshops-observability`
@@ -77,7 +80,9 @@ the Always Free disk without protecting against VM loss.
 
 The backup publishes its last-success time and retained size through the
 node-exporter textfile collector. vmalert raises a critical alert if no verified
-backup succeeds for 36 hours.
+observability backup succeeds for 36 hours. It also alerts when the OKE database
+backup or weekly restore verification becomes stale, a recovery Job fails, or a
+PostgreSQL volume falls below 15% free space.
 
 Alertmanager currently validates, groups and retains alerts locally. External
 delivery is enabled only after a Telegram bot token/chat ID or SMTP destination

@@ -10,7 +10,7 @@ ContainerName=localshops-alertmanager
 Network=host
 Volume=/etc/localshops-observability/alertmanager/config.yml:/etc/alertmanager/config.yml:ro,Z
 Volume=/srv/localshops-observability/alertmanager:/alertmanager:Z
-Exec=--config.file=/etc/alertmanager/config.yml --storage.path=/alertmanager --web.listen-address=127.0.0.1:9093 --data.retention=120h
+Exec=--config.file=/etc/alertmanager/config.yml --storage.path=/alertmanager --web.listen-address=127.0.0.1:9093 --cluster.listen-address= --data.retention=120h
 
 [Service]
 Restart=always

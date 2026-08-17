@@ -20,4 +20,3 @@ observability_images:
   alertmanager: quay.io/prometheus/alertmanager@sha256:27c475db5fb156cab31d5c18a4251ac7ed567746a2483ff264516437a39b15ba
   blackbox_exporter: quay.io/prometheus/blackbox-exporter@sha256:88f7d7397ad4cf415b575df60c937fef09e0534cb8a3e060bedff6e61da9e613
   node_exporter: quay.io/prometheus/node-exporter@sha256:2e9d73002adb973441ec1c815a8e7e7c2465f5e535d859d16ee395f2ceb857c7
-  postgres_exporter: quay.io/prometheuscommunity/postgres-exporter@sha256:5e671299e1fb608fab7505841bc5fcdb91a4fa251a2446db9c14cc6b483dfd53
