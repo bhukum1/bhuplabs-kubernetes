@@ -44,11 +44,17 @@ Secrets are deliberately absent from Git and inventory. The live host uses:
 
 - `/etc/localshops-observability/grafana.env` — Grafana administrator only;
 - `/etc/localshops-observability/caddy.env` — ingestion password hash only;
+- `/etc/localshops-observability/alertmanager-smtp.json` — SMTP endpoint,
+  sender, destination and generated OCI SMTP username;
+- `/etc/localshops-observability/alertmanager-smtp-password` — generated OCI
+  SMTP password, mounted read-only into Alertmanager;
 - OKE Secret `monitoring/observability-ingest` — ingestion password only.
 
-All files must be root-owned mode `0600`. The original bootstrap credential can
-remain in a root-only offline recovery file, but it is not mounted into any
-container.
+Runtime metadata files must be root-owned mode `0600`. The SMTP password may be
+root-owned mode `0640` with group ID `65534` so only the rootful Alertmanager
+container's unprivileged user can read the bind mount. The original bootstrap
+credential can remain in a root-only offline recovery file, but it is not
+mounted into any container.
 
 Each application namespace holds a runtime-only `postgres-monitor` Secret for a
 dedicated `localshops_monitor` login granted only the built-in `pg_monitor`
@@ -84,10 +90,37 @@ observability backup succeeds for 36 hours. It also alerts when the OKE database
 backup or weekly restore verification becomes stale, a recovery Job fails, or a
 PostgreSQL volume falls below 15% free space.
 
-Alertmanager currently validates, groups and retains alerts locally. External
-delivery is enabled only after a Telegram bot token/chat ID or SMTP destination
-is supplied out of band. Keep those values in root-only files and use the
-supported Alertmanager `*_file` fields; never add them to this repository.
+Alertmanager sends production and infrastructure notifications through OCI
+Email Delivery. Critical production alerts repeat hourly and warnings repeat
+every four hours. DEV and legacy endpoint alerts use a separate receiver and
+repeat at most once per 24 hours. Both receivers send a resolution email.
+
+Bootstrap the two runtime files after creating the OCI SMTP credential. Keep
+the JSON file root-owned mode `0600`; keep the password root-owned, group
+`65534`, mode `0640`. The JSON document has this schema and must not be
+committed:
+
+```json
+{
+  "smarthost": "smtp.email.ap-hyderabad-1.oci.oraclecloud.com:587",
+  "from": "alerts@dukly.in",
+  "to": "operator@example.com",
+  "auth_username": "generated OCI SMTP username"
+}
+```
+
+Use a dedicated OCI identity with only the `SMTP credentials` capability. The
+`localshops-email-senders` group is limited to the approved sender with this
+tenancy policy:
+
+```text
+Allow group localshops-email-senders to use approved-senders in tenancy where target.approved-sender.emailaddress = 'alerts@dukly.in'
+```
+
+OCI Email Delivery also requires the `dukly.in` DNS zone to publish the
+region-specific SPF record and the DKIM CNAME generated for the email domain.
+Alertmanager can authenticate and send before DNS validation completes, but
+delivery and spam placement are not production-ready until both records resolve.
 
 ## Useful checks
 

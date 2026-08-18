@@ -22,6 +22,9 @@ scrape_configs:
           - "127.0.0.1:9093"
           - "127.0.0.1:9115"
           - "127.0.0.1:3000"
+        labels:
+          environment: infrastructure
+          service: observability
 
   - job_name: public-endpoints
     metrics_path: /probe
@@ -35,14 +38,26 @@ scrape_configs:
           - https://app.dukly.in/
           - https://admin.dukly.in/admin
           - https://api.dukly.in/health/ready
+        labels:
+          environment: production
+          probe_scope: public
+          service: storefront
+      - targets:
           - https://app.bhuplabs.dev/
           - https://api.bhuplabs.dev/health/ready
           - https://shops.bhuplabs.dev/
+        labels:
+          environment: legacy
+          probe_scope: public
+          service: storefront
+      - targets:
           - https://dev-app.bhuplabs.dev/
           - https://dev-api.bhuplabs.dev/health/ready
           - https://dev-shops.bhuplabs.dev/
         labels:
+          environment: development
           probe_scope: public
+          service: storefront
     relabel_configs:
       - source_labels: [__address__]
         target_label: __param_target

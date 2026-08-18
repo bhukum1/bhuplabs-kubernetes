@@ -240,6 +240,78 @@
       loop: "{{ observability_secret_files.results }}"
       no_log: true
 
+    - name: Check Alertmanager SMTP runtime files
+      ansible.builtin.stat:
+        path: "/etc/localshops-observability/{{ item }}"
+      register: alertmanager_smtp_files
+      loop:
+        - alertmanager-smtp.json
+        - alertmanager-smtp-password
+      no_log: true
+
+    - name: Refuse to enable email without protected SMTP runtime files
+      ansible.builtin.assert:
+        that:
+          - item.stat.exists
+          - item.stat.pw_name == "root"
+          - >-
+            (item.item == "alertmanager-smtp.json" and item.stat.mode == "0600")
+            or
+            (item.item == "alertmanager-smtp-password" and
+             item.stat.mode == "0640" and item.stat.gid == 65534)
+        fail_msg: >-
+          An Alertmanager SMTP runtime file is missing or has unsafe ownership
+          or permissions. Follow the bootstrap in README.md; never commit it.
+      loop: "{{ alertmanager_smtp_files.results }}"
+      no_log: true
+
+    - name: Read non-password Alertmanager SMTP settings
+      ansible.builtin.slurp:
+        src: /etc/localshops-observability/alertmanager-smtp.json
+      register: alertmanager_smtp_document
+      no_log: true
+
+    - name: Decode Alertmanager SMTP settings
+      ansible.builtin.set_fact:
+        alertmanager_smtp: "{{ alertmanager_smtp_document.content | b64decode | from_json }}"
+      no_log: true
+
+    - name: Validate Alertmanager SMTP settings
+      ansible.builtin.assert:
+        that:
+          - alertmanager_smtp.smarthost == "smtp.email.ap-hyderabad-1.oci.oraclecloud.com:587"
+          - alertmanager_smtp.from is match('^[^@\\s]+@dukly\\.in$')
+          - alertmanager_smtp.to is match('^[^@\\s]+@[^@\\s]+$')
+          - alertmanager_smtp.auth_username | length > 20
+        fail_msg: Alertmanager SMTP settings are invalid.
+      no_log: true
+
+    - name: Render the protected Alertmanager notification configuration
+      ansible.builtin.template:
+        src: alertmanager-config.yml.j2
+        dest: /etc/localshops-observability/alertmanager/config.yml
+        owner: root
+        group: "65534"
+        mode: "0640"
+      notify: Restart observability services
+      no_log: true
+
+    - name: Validate the rendered Alertmanager configuration before restart
+      ansible.builtin.command:
+        argv:
+          - podman
+          - run
+          - --rm
+          - --network=none
+          - --entrypoint=/bin/amtool
+          - --volume=/etc/localshops-observability/alertmanager/config.yml:/etc/alertmanager/config.yml:ro,Z
+          - --volume=/etc/localshops-observability/alertmanager-smtp-password:/etc/alertmanager/smtp-password:ro,Z
+          - "{{ observability_images.alertmanager }}"
+          - check-config
+          - /etc/alertmanager/config.yml
+      changed_when: false
+      no_log: true
+
     - name: Check public gateway services in firewalld
       ansible.builtin.command:
         argv:

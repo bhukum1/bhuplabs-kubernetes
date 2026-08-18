@@ -9,6 +9,7 @@ Image=quay.io/prometheus/alertmanager@sha256:27c475db5fb156cab31d5c18a4251ac7ed5
 ContainerName=localshops-alertmanager
 Network=host
 Volume=/etc/localshops-observability/alertmanager/config.yml:/etc/alertmanager/config.yml:ro,Z
+Volume=/etc/localshops-observability/alertmanager-smtp-password:/etc/alertmanager/smtp-password:ro,Z
 Volume=/srv/localshops-observability/alertmanager:/alertmanager:Z
 Exec=--config.file=/etc/alertmanager/config.yml --storage.path=/alertmanager --web.listen-address=127.0.0.1:9093 --cluster.listen-address= --data.retention=120h
 
