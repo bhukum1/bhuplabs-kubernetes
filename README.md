@@ -1,8 +1,11 @@
 # Bhuplabs platform infrastructure
 
-> The repository currently contains both the running legacy kubeadm platform
-> and the in-progress zero-cost OKE replacement. Legacy manifests remain
-> unchanged until the new platform passes its migration gates.
+> Production now runs on the private, zero-cost OKE architecture with node02
+> providing administrative access and external observability. The historical
+> kubeadm, Keycloak, Vault and n8n directories are retained only as migration
+> reference and must not be redeployed. Use
+> [`docs/operations/PRODUCTION-RUNBOOK.md`](docs/operations/PRODUCTION-RUNBOOK.md)
+> for current operations and recovery.
 
 Git-safe source for the deployed Bhuplabs platform:
 
