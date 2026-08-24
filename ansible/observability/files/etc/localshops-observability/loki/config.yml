@@ -7,6 +7,9 @@ server:
   grpc_listen_port: 9095
 
 common:
+  # Single-node Loki uses an in-memory ring. Advertise the same loopback
+  # address that the gRPC server listens on so internal modules can connect.
+  instance_addr: 127.0.0.1
   path_prefix: /loki
   replication_factor: 1
   ring:
